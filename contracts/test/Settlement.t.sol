@@ -427,6 +427,15 @@ contract SettlementTest is Test {
         vm.stopPrank();
     }
 
+    function test_aTokenTheFeedDoesNotPriceCannotBeListed() public {
+        MockToken unknown = new MockToken(18);
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(unknown);
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(Settlement.PriceUnavailable.selector, address(unknown)));
+        settlement.open(tokens, new uint256[](1), LIMIT);
+    }
+
     function test_aTokenWithOtherDecimalsCannotBeListed() public {
         MockToken six = new MockToken(6);
         address[] memory tokens = new address[](1);
@@ -438,11 +447,32 @@ contract SettlementTest is Test {
 
     // ---- the price is checked, not trusted ----
 
-    function test_aBuyLimitAboveTheBandIsRefusedBeforeAnyTrade() public {
-        // The feed says 250. 1% above is 252.50; this limit allows 255.
+    function test_aBuyAboveTheBandIsUndone() public {
+        // The feed says 250. 1% above is 252.50; the market charges 255.
         Settlement.Trade memory trade = _netBuy(nvda, 2e18, 510e18, _fills(alice, 2e18), _none());
         vm.expectRevert(abi.encodeWithSelector(Settlement.PriceOutOfBand.selector, 255e18, 247.5e18, 252.5e18));
         _settle(trade);
+        _assertUntouched(alice);
+    }
+
+    function test_roomForSlippageDoesNotCountAgainstTheBand() public {
+        // The caller allows up to 255 a token, above the band, but the market charges 252.
+        bytes memory call = abi.encodeCall(MockRouter.swap, (cash, nvda, 504e18, 2e18, address(settlement)));
+        _settle(Settlement.Trade(address(nvda), true, 2e18, 510e18, address(router), call, _fills(alice, 2e18), _none()));
+        assertEq(cash.balanceOf(alice), START_CASH - 504e18);
+        _assertHoldsNothing();
+    }
+
+    function test_aTokenCannotSettleTwiceInOneBatch() public {
+        Settlement.Trade[] memory trades = new Settlement.Trade[](2);
+        trades[0] = _netSell(nvda, 1e18, 248e18, _none(), _fills(bob, 1e18));
+        trades[1] = _netBuy(nvda, 1e18, 252e18, _fills(alice, 1e18), _none());
+        vm.prank(operator);
+        vm.expectRevert(abi.encodeWithSelector(Settlement.TokenTwice.selector, address(nvda)));
+        settlement.settle(trades);
+        // The same token in the next batch is fine.
+        _settle(_netSell(nvda, 1e18, 248e18, _none(), _fills(bob, 1e18)));
+        _settle(_netBuy(nvda, 1e18, 252e18, _fills(alice, 1e18), _none()));
     }
 
     function test_aSaleBelowTheBandIsUndone() public {
@@ -606,6 +636,24 @@ contract SettlementTest is Test {
         assertEq(nvda.balanceOf(alice), START_STOCK + 3e18);
     }
 
+    function test_theDailyLimitCapsSellersToo() public {
+        vm.prank(bob);
+        settlement.setDailyLimit(600e18);
+        Settlement.Trade memory trade = _netSell(nvda, 3e18, 750e18, _none(), _fills(bob, 3e18));
+        vm.expectRevert(abi.encodeWithSelector(Settlement.DailyLimitExceeded.selector, bob, 750e18, 600e18));
+        _settle(trade);
+        _assertUntouched(bob);
+    }
+
+    function test_aMatchedBuyerInASellingBatchCannotPassItsTarget() public {
+        // Alice has room for 52 tokens. Bob sells 60: 53 to her and 7 to the market.
+        Settlement.Trade memory trade = _netSell(nvda, 7e18, 1_750e18, _fills(alice, 53e18), _fills(bob, 60e18));
+        vm.expectRevert(abi.encodeWithSelector(Settlement.PastTarget.selector, alice, address(nvda), 38_250e18, 38_000e18));
+        _settle(trade);
+        _assertUntouched(alice);
+        _assertUntouched(bob);
+    }
+
     function test_theLimitDoesNotDoubleAcrossMidnight() public {
         vm.prank(alice);
         settlement.setDailyLimit(600e18);
@@ -697,6 +745,35 @@ contract SettlementTest is Test {
         vm.prank(replacement);
         vm.expectRevert(Settlement.NotOperator.selector);
         settlement.settle(trades);
+    }
+
+    function test_onlyTheAdminCanRemoveAnOperatorOrARoute() public {
+        vm.startPrank(operator);
+        vm.expectRevert(Settlement.NotAdmin.selector);
+        settlement.removeOperator();
+        vm.expectRevert(Settlement.NotAdmin.selector);
+        settlement.removeRouter(address(router));
+        vm.stopPrank();
+        assertEq(settlement.operator(), operator);
+        assertTrue(settlement.isRouter(address(router)));
+    }
+
+    function test_nobodyCanActivateAnOperatorThatWasNeverProposed() public {
+        vm.warp(block.timestamp + 30 days);
+        vm.expectRevert(Settlement.NotReady.selector);
+        settlement.activateOperator();
+        assertEq(settlement.operator(), operator);
+    }
+
+    function test_removingTheOperatorCancelsAWaitingReplacement() public {
+        vm.startPrank(admin);
+        settlement.proposeOperator(makeAddr("replacement"));
+        settlement.removeOperator();
+        vm.stopPrank();
+        vm.warp(block.timestamp + 2 days);
+        vm.expectRevert(Settlement.NotReady.selector);
+        settlement.activateOperator();
+        assertEq(settlement.operator(), address(0));
     }
 
     function test_theAdminCannotSettle_orMakeItselfOperatorAtOnce() public {

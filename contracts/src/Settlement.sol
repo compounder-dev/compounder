@@ -55,13 +55,16 @@ contract Collector {
 ///              so a fund can never be traded back and forth.
 ///           3. Everyone in a batch gets the same price for a token: the
 ///              price the batch's own market trade achieved, measured from
-///              balances, never reported by the caller.
+///              balances, never reported by the caller. A token appears at
+///              most once in a batch.
 ///           4. That price must sit within a fixed band of a public price
 ///              feed that is fresh. Otherwise the batch is undone.
 ///           5. What a fund gives up is paid for in full, in the same
 ///              transaction.
-///           6. A fund's traded value never passes its daily limit, counted
-///              over a rolling day.
+///           6. A fund's traded value is capped by an allowance that holds
+///              at most its daily limit and refills evenly over a day. So it
+///              never trades more than the limit at once, nor more than
+///              twice the limit in any one day.
 ///
 ///         Buys and sells of one token are matched against each other first.
 ///         Only the difference is traded on the open market, through an
@@ -122,6 +125,7 @@ contract Settlement {
     error DailyLimitExceeded(address account, uint256 value, uint256 left);
     error RouterNotAllowed(address router);
     error NetQuantityMismatch(uint256 expected, uint256 stated);
+    error TokenTwice(address token);
     error EmptyFill();
     error PriceUnavailable(address token);
     error PriceOutOfBand(uint256 price, uint256 lowest, uint256 highest);
@@ -227,6 +231,9 @@ contract Settlement {
             if (token == cash || _targetPlusOne[msg.sender][epoch][token] != 0) revert BadTargets();
             _requireEighteenDecimals(token);
             if (targetShares[i] > WHOLE) revert BadTargets();
+            // Only tokens the public feed prices can be listed. The price may be old here; it is checked for age when trading.
+            (uint256 feed,,,) = priceFeed.prices(token);
+            if (feed == 0) revert PriceUnavailable(token);
             _targetPlusOne[msg.sender][epoch][token] = targetShares[i] + 1;
             total += targetShares[i];
         }
@@ -324,7 +331,7 @@ contract Settlement {
         for (uint256 i = 0; i < trades.length; i++) {
             _settleToken(trades[i]);
         }
-        // Rounding always favours the contract by under one unit per fill, so
+        // Rounding always favours the contract, by a unit or two per fill, so
         // it can only end level or ahead. Anything else means a bug or a
         // misbehaving token or route, and the whole batch is undone.
         uint256 cashAfter = IERC20(cash).balanceOf(address(this));
@@ -335,6 +342,7 @@ contract Settlement {
         address token = trade.token;
         if (token == cash || trade.netQuantity == 0) revert NetQuantityMismatch(0, trade.netQuantity);
         if (!isRouter[trade.router] || trade.router == token) revert RouterNotAllowed(trade.router);
+        _onceThisBatch(token);
         Band memory band = _band(token);
         uint256 tokenBefore = IERC20(token).balanceOf(address(this));
 
@@ -373,9 +381,9 @@ contract Settlement {
     function _buyOnMarket(Trade calldata trade, uint256 bought, uint256 sold, Band memory band) private returns (uint256 price) {
         uint256 net = trade.netQuantity;
         if (bought <= sold || bought - sold != net) revert NetQuantityMismatch(bought > sold ? bought - sold : 0, net);
-        // The most the caller is willing to pay per token must already be inside the band.
+        // The most a buyer can be charged per token. It may sit above the band
+        // to leave room for slippage; the price achieved is what the band judges.
         uint256 worstPrice = _ceilDiv(trade.cashLimit * ONE, net);
-        if (worstPrice > band.highest) revert PriceOutOfBand(worstPrice, band.lowest, band.highest);
 
         for (uint256 i = 0; i < trade.buys.length; i++) {
             Fill calldata fill = trade.buys[i];
@@ -440,6 +448,17 @@ contract Settlement {
             _push(trade.token, fill.account, fill.quantity);
             emit Filled(fill.account, trade.token, true, fill.quantity, cost);
         }
+    }
+
+    /// @dev A second trade in the same token could settle at a second price.
+    function _onceThisBatch(address token) private {
+        bytes32 slot = keccak256(abi.encode(token, _batch, "token"));
+        uint256 seen;
+        assembly {
+            seen := tload(slot)
+            tstore(slot, 1)
+        }
+        if (seen != 0) revert TokenTwice(token);
     }
 
     /// @dev Let the route spend up to `allowance` of `tokenIn`, call it, and
