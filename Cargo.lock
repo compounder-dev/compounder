@@ -1505,6 +1505,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "compounder-engine",
+ "compounder-prices",
  "serde",
  "serde_json",
  "tokio",
