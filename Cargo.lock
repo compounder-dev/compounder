@@ -1489,6 +1489,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "compounder-prices"
+version = "0.1.0"
+
+[[package]]
 name = "compounder-server"
 version = "0.1.0"
 dependencies = [
