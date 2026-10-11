@@ -2,3 +2,22 @@
 name = "compounder-prices"
 version = "0.1.0"
 edition = "2021"
+
+[features]
+default = ["feed"]
+# The network source and the command line tool. Without it the crate has no
+# dependencies at all, which is how the engine and the browser build take it.
+feed = ["dep:reqwest", "dep:serde", "dep:serde_json"]
+
+[dependencies]
+# The web client the operator already uses, in its blocking form: a refresh
+# is one request after another, a second apart.
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"], optional = true }
+# To read the feed's answer.
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }
+
+[[bin]]
+name = "compounder-prices"
+path = "src/main.rs"
+required-features = ["feed"]
