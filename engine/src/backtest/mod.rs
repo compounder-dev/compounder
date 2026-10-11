@@ -118,11 +118,15 @@ impl Run {
 /// Run a strategy over a history. Every problem with the strategy, the
 /// prices or the settings comes back instead when there is one.
 pub fn backtest(strategy: &RuleStrategy, history: &History, run: &Run) -> Result<Backtest, Vec<Issue>> {
-    let issues = run.issues();
-    if !issues.is_empty() {
-        return Err(issues);
-    }
-    let evaluator = Evaluator::new(strategy, history, run.run_in)?;
+    let mut issues = run.issues();
+    let evaluator = match Evaluator::new(strategy, history, run.run_in) {
+        Ok(evaluator) if issues.is_empty() => evaluator,
+        Ok(_) => return Err(issues),
+        Err(more) => {
+            issues.extend(more);
+            return Err(issues);
+        }
+    };
     let window = evaluator.window(run.start, run.end)?;
     let calendar = history.calendar();
     let assets = evaluator.assets();

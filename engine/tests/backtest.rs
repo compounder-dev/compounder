@@ -217,9 +217,11 @@ fn a_run_that_cannot_be_made_is_refused_with_the_reason() {
     assert_eq!(refused(Run { start: Some(day("2025-03-08")), end: Some(day("2025-03-09")), ..free(100.0) }), at(IssueCode::NoTradingDay, "run"));
     assert_eq!(refused(Run { start: Some(day("2026-01-05")), ..free(100.0) }), at(IssueCode::NoTradingDay, "run.start"));
     assert_eq!(refused(Run { end: Some(day("2024-01-05")), ..free(100.0) }), at(IssueCode::NoTradingDay, "run.end"));
-    // A strategy with problems is refused before anything is run.
+    // A strategy with problems is refused before anything is run, and its problems come back beside the run's.
     let empty = daily(equal(vec![]));
     assert_eq!(backtest(&empty, &history, &free(100.0)).expect_err("refused")[0].code, IssueCode::IncompleteBlock);
+    let both = backtest(&empty, &history, &free(0.0)).expect_err("refused");
+    assert_eq!(both.iter().map(|issue| issue.code).collect::<Vec<_>>(), [IssueCode::InvalidRun, IssueCode::IncompleteBlock]);
 }
 
 #[test]
