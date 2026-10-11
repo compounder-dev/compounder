@@ -1,0 +1,16 @@
+# build output
+/target/
+/web/dist/
+node_modules/
+
+# local environment and secrets
+.env
+.env.*
+*.pem
+*.key
+.dev.vars
+
+# editor and OS files
+.DS_Store
+.idea/
+.vscode/

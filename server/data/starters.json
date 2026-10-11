@@ -1,0 +1,245 @@
+{
+ "starters": [
+  {
+   "id": "magnificent-seven",
+   "name": "The Magnificent Seven",
+   "summary": "The seven companies behind most of the market's growth this decade, in equal parts.",
+   "accent": "amber",
+   "strategy": {
+    "entry": {
+     "blockType": "topLevel",
+     "name": "The Magnificent Seven",
+     "children": {
+      "blockType": "weight",
+      "weightType": "equal",
+      "weightings": [
+       "0",
+       "0",
+       "0",
+       "0",
+       "0",
+       "0",
+       "0"
+      ],
+      "children": [
+       {
+        "blockType": "asset",
+        "assetId": "0x390a684ef9cade28a7ad0dfa61ab1eb3842618c4:56",
+        "blockIdForInstance": "magnificent-seven-aaplon",
+        "parentNodeId": "magnificent-seven-weights"
+       },
+       {
+        "blockType": "asset",
+        "assetId": "0x6bfe75d1ad432050ea973c3a3dcd88f02e2444c3:56",
+        "blockIdForInstance": "magnificent-seven-msfton",
+        "parentNodeId": "magnificent-seven-weights"
+       },
+       {
+        "blockType": "asset",
+        "assetId": "0x4553cfe1c09f37f38b12dc509f676964e392f8fc:56",
+        "blockIdForInstance": "magnificent-seven-amznon",
+        "parentNodeId": "magnificent-seven-weights"
+       },
+       {
+        "blockType": "asset",
+        "assetId": "0xa9ee28c80f960b889dfbd1902055218cba016f75:56",
+        "blockIdForInstance": "magnificent-seven-nvdaon",
+        "parentNodeId": "magnificent-seven-weights"
+       },
+       {
+        "blockType": "asset",
+        "assetId": "0x091fc7778e6932d4009b087b191d1ee3bac5729a:56",
+        "blockIdForInstance": "magnificent-seven-googlon",
+        "parentNodeId": "magnificent-seven-weights"
+       },
+       {
+        "blockType": "asset",
+        "assetId": "0xd7df5863a3e742f0c767768cdfcb63f09e0422f6:56",
+        "blockIdForInstance": "magnificent-seven-metaon",
+        "parentNodeId": "magnificent-seven-weights"
+       },
+       {
+        "blockType": "asset",
+        "assetId": "0x2494b603319d4d9f9715c9f4496d9e0364b59d93:56",
+        "blockIdForInstance": "magnificent-seven-tslaon",
+        "parentNodeId": "magnificent-seven-weights"
+       }
+      ],
+      "blockIdForInstance": "magnificent-seven-weights",
+      "parentNodeId": "magnificent-seven-top"
+     },
+     "blockIdForInstance": "magnificent-seven-top",
+     "parentNodeId": "root"
+    },
+    "version": "1.0.0",
+    "tradingSettings": {
+     "type": "threshold",
+     "triggerPercentage": 10.0
+    }
+   }
+  },
+  {
+   "id": "ai-build-out",
+   "name": "The AI Build-out",
+   "summary": "The companies making the chips, memory, networks and data centres that AI runs on.",
+   "accent": "blue",
+   "strategy": {
+    "entry": {
+     "blockType": "topLevel",
+     "name": "The AI Build-out",
+     "children": {
+      "blockType": "weight",
+      "weightType": "equal",
+      "weightings": [
+       "0",
+       "0",
+       "0",
+       "0",
+       "0",
+       "0",
+       "0",
+       "0"
+      ],
+      "children": [
+       {
+        "blockType": "asset",
+        "assetId": "0xa9ee28c80f960b889dfbd1902055218cba016f75:56",
+        "blockIdForInstance": "ai-build-out-nvdaon",
+        "parentNodeId": "ai-build-out-weights"
+       },
+       {
+        "blockType": "asset",
+        "assetId": "0x0ed2e3180edf393e6bf8db124bd15ddd54de150a:56",
+        "blockIdForInstance": "ai-build-out-avgoon",
+        "parentNodeId": "ai-build-out-weights"
+       },
+       {
+        "blockType": "asset",
+        "assetId": "0xc37042a7a4fa510d8884a433762ab87257b91965:56",
+        "blockIdForInstance": "ai-build-out-tsmon",
+        "parentNodeId": "ai-build-out-weights"
+       },
+       {
+        "blockType": "asset",
+        "assetId": "0x9f16e46c73b43bdb70861247d537bee4ea18f639:56",
+        "blockIdForInstance": "ai-build-out-amdon",
+        "parentNodeId": "ai-build-out-weights"
+       },
+       {
+        "blockType": "asset",
+        "assetId": "0x8b6acf6041a81567f012ff6a4c6d96d5818d74bf:56",
+        "blockIdForInstance": "ai-build-out-muon",
+        "parentNodeId": "ai-build-out-weights"
+       },
+       {
+        "blockType": "asset",
+        "assetId": "0x538e2838f9ebc9b891399df4a8dcc42890d9dc20:56",
+        "blockIdForInstance": "ai-build-out-aneton",
+        "parentNodeId": "ai-build-out-weights"
+       },
+       {
+        "blockType": "asset",
+        "assetId": "0x9cea8a7be1ab0320b709d368ad60d8500f55995f:56",
+        "blockIdForInstance": "ai-build-out-vrton",
+        "parentNodeId": "ai-build-out-weights"
+       },
+       {
+        "blockType": "asset",
+        "assetId": "0x76e39171cb665a35981e744e2ceb7012f76caeac:56",
+        "blockIdForInstance": "ai-build-out-crwvon",
+        "parentNodeId": "ai-build-out-weights"
+       }
+      ],
+      "blockIdForInstance": "ai-build-out-weights",
+      "parentNodeId": "ai-build-out-top"
+     },
+     "blockIdForInstance": "ai-build-out-top",
+     "parentNodeId": "root"
+    },
+    "version": "1.0.0",
+    "tradingSettings": {
+     "type": "threshold",
+     "triggerPercentage": 10.0
+    }
+   }
+  },
+  {
+   "id": "hard-assets",
+   "name": "Hard Assets",
+   "summary": "Gold first, then silver, platinum and the companies that pull value out of the ground.",
+   "accent": "green",
+   "strategy": {
+    "entry": {
+     "blockType": "topLevel",
+     "name": "Hard Assets",
+     "children": {
+      "blockType": "weight",
+      "weightType": "specified-percentage",
+      "weightings": [
+       "40",
+       "15",
+       "5",
+       "10",
+       "10",
+       "10",
+       "10"
+      ],
+      "children": [
+       {
+        "blockType": "asset",
+        "assetId": "0xfa9a1e901085e269f6d428f79cd5252d8b919344:56",
+        "blockIdForInstance": "hard-assets-gldon",
+        "parentNodeId": "hard-assets-weights"
+       },
+       {
+        "blockType": "asset",
+        "assetId": "0x8b872732b07be325a8803cdb480d9d20b6f8d11b:56",
+        "blockIdForInstance": "hard-assets-slvon",
+        "parentNodeId": "hard-assets-weights"
+       },
+       {
+        "blockType": "asset",
+        "assetId": "0x3ec23f52f6573fc0587a0631dd8c3b107f6bcb35:56",
+        "blockIdForInstance": "hard-assets-pplton",
+        "parentNodeId": "hard-assets-weights"
+       },
+       {
+        "blockType": "asset",
+        "assetId": "0x5e63232993789601ce362e0240a299c1dfcbfbec:56",
+        "blockIdForInstance": "hard-assets-nemon",
+        "parentNodeId": "hard-assets-weights"
+       },
+       {
+        "blockType": "asset",
+        "assetId": "0xe3b17e6d290a0f28bd32af4064637057627004d5:56",
+        "blockIdForInstance": "hard-assets-fcxon",
+        "parentNodeId": "hard-assets-weights"
+       },
+       {
+        "blockType": "asset",
+        "assetId": "0x4d209d275e3492ac08497a7a42915899c4dd5e86:56",
+        "blockIdForInstance": "hard-assets-xomon",
+        "parentNodeId": "hard-assets-weights"
+       },
+       {
+        "blockType": "asset",
+        "assetId": "0xa75f08b9a91439daac9cc7072857cc0a98cf527a:56",
+        "blockIdForInstance": "hard-assets-ccjon",
+        "parentNodeId": "hard-assets-weights"
+       }
+      ],
+      "blockIdForInstance": "hard-assets-weights",
+      "parentNodeId": "hard-assets-top"
+     },
+     "blockIdForInstance": "hard-assets-top",
+     "parentNodeId": "root"
+    },
+    "version": "1.0.0",
+    "tradingSettings": {
+     "type": "threshold",
+     "triggerPercentage": 10.0
+    }
+   }
+  }
+ ]
+}
