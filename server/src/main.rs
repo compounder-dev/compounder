@@ -24,6 +24,7 @@ use compounder_engine::{rules::RuleStrategy, strategy::Strategy};
 use prices::Prices;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use tokio::sync::Semaphore;
 use tower_http::services::{ServeDir, ServeFile};
 
 const BIND: ([u8; 4], u16) = ([127, 0, 0, 1], 8787);
@@ -216,8 +217,15 @@ async fn backtest_strategy(State(prices): State<Option<Arc<Prices>>>, body: Byte
     let Some(prices) = prices else {
         return Err(ApiError::unavailable("this server has no price history to run a backtest on"));
     };
+    // No more run at once than there are processors. The rest wait their turn.
+    let _turn = turns().acquire().await.map_err(|error| ApiError::broken(error.to_string()))?;
     let answer = tokio::task::spawn_blocking(move || backtest::run(&prices, &ask)).await.map_err(|error| ApiError::broken(error.to_string()))?;
     Ok(Json(answer?))
+}
+
+fn turns() -> &'static Semaphore {
+    static TURNS: OnceLock<Semaphore> = OnceLock::new();
+    TURNS.get_or_init(|| Semaphore::new(std::thread::available_parallelism().map_or(1, usize::from)))
 }
 
 async fn unknown_api_route() -> ApiError {
@@ -491,6 +499,34 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_benchmark_with_less_history_is_compared_over_its_own_days_and_says_so() {
+        use compounder_prices::{adjust::Bar, day::Day, store::Store};
+        let store = MadeUp::new("shorter");
+        // LATE starts on the run's 101st day at 10 and gains a tenth of a dollar a day.
+        let first = Day::from_ymd(2024, 1, 1).unwrap().number();
+        let days: Vec<Day> = (first..).map(Day::from_number).filter(|day| !matches!(day.number().rem_euclid(7), 2 | 3)).take(300).collect();
+        let bars: Vec<Bar> = days[100..].iter().enumerate().map(|(index, day)| Bar::new(*day, 10.0 + 0.1 * index as f64)).collect();
+        Store::open(&store.dir).unwrap().save("LATE", &bars).unwrap();
+
+        let request = json!({ "strategy": equal_monthly(vec![listed("SPY")]), "benchmark": "LATE", "slippage": 0 });
+        let (status, body) = call_with(store.prices(), "POST", "/v1/backtest", Some(request)).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        let benchmark = &body["benchmark"];
+        assert_eq!((benchmark["first_day"].as_str(), benchmark["last_day"].as_str()), (Some(days[100].to_string().as_str()), Some("2025-02-21")));
+        // No value before its first day, and level with the strategy on it.
+        assert!(benchmark["values"][99].is_null());
+        assert_eq!(benchmark["values"][100], body["values"][100]);
+        // SPY goes from 150 to 249.5 over those days and LATE from 10 to 29.9.
+        assert!((benchmark["strategy_return"].as_f64().unwrap() - (249.5 / 150.0 - 1.0)).abs() < 1e-9);
+        assert!((benchmark["stats"]["total_return"].as_f64().unwrap() - 1.99).abs() < 1e-9);
+        assert_eq!(body["warnings"][0]["code"], "BENCHMARK_SHORTER");
+        // A benchmark that covers the whole run needs no such warning.
+        let (_, whole) = call_with(store.prices(), "POST", "/v1/backtest", Some(json!({ "strategy": equal_monthly(vec![listed("SPY")]), "benchmark": "KO" }))).await;
+        assert_eq!(whole["warnings"], json!([]));
+        assert_eq!(whole["benchmark"]["strategy_return"], whole["stats"]["total_return"]);
+    }
+
+    #[tokio::test]
     async fn a_token_is_tested_on_the_share_it_tracks() {
         let store = MadeUp::new("token");
         let token = assets().values().find(|asset| asset.tracks.as_deref() == Some("NVDA")).expect("a token that tracks NVDA");
@@ -546,6 +582,8 @@ mod tests {
         assert_eq!((status, body["error"]["code"].as_str()), (StatusCode::UNPROCESSABLE_ENTITY, Some("invalid_strategy")));
         // And so is a run it cannot be given.
         let (status, body) = call_with(store.prices(), "POST", "/v1/backtest", Some(json!({ "strategy": strategy, "capital": -5 }))).await;
+        assert_eq!((status, body["error"]["issues"][0]["code"].as_str()), (StatusCode::UNPROCESSABLE_ENTITY, Some("INVALID_RUN")));
+        let (status, body) = call_with(store.prices(), "POST", "/v1/backtest", Some(json!({ "strategy": strategy, "capital": 1e308 }))).await;
         assert_eq!((status, body["error"]["issues"][0]["code"].as_str()), (StatusCode::UNPROCESSABLE_ENTITY, Some("INVALID_RUN")));
     }
 

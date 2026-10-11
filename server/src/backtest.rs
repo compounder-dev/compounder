@@ -153,11 +153,11 @@ pub fn run(prices: &Prices, ask: &Ask) -> Result<Value, ApiError> {
 
     let result = backtest(&ask.strategy, &history, &ask.run).map_err(ApiError::invalid_strategy)?;
     let stats = result.statistics().map_err(ApiError::broken)?;
+    warnings.extend(result.warnings.iter().map(|warning| json!(warning)));
     let against = match &benchmark {
-        Some((symbol, listing)) => Some(compared(&result, &calendar, symbol, listing)?),
+        Some((symbol, listing)) => Some(compared(&result, &calendar, symbol, listing, &mut warnings)?),
         None => None,
     };
-    warnings.extend(result.warnings.iter().map(|warning| json!(warning)));
 
     let traded: Vec<_> = result.days.iter().filter(|day| day.traded).collect();
     let total = |amount: fn(&compounder_engine::backtest::DayResult) -> f64| cents(traded.iter().map(|day| amount(day)).sum());
@@ -189,17 +189,33 @@ pub fn run(prices: &Prices, ask: &Ask) -> Result<Value, ApiError> {
     Ok(answer)
 }
 
-/// The benchmark beside the run: its figures, and what the same capital
-/// would have been worth in it on each of the run's days. A day before the
-/// benchmark's own first has no value.
-fn compared(result: &Backtest, calendar: &Calendar, symbol: &str, listing: &Listing) -> Result<Value, ApiError> {
+/// The benchmark beside the run, over the days both have.
+///
+/// A benchmark can have less history than the run covers. Its figures are
+/// then for its own days only, so the answer says which days those are and
+/// what the strategy made over the same ones: the two returns that may be
+/// set side by side. Its line starts level with the strategy on the first
+/// of those days and has no value outside them.
+fn compared(result: &Backtest, calendar: &Calendar, symbol: &str, listing: &Listing, warnings: &mut Vec<Value>) -> Result<Value, ApiError> {
     let figures = result.against(listing.series.days(), listing.series.prices()).map_err(|reason| ApiError::invalid_request(format!("the benchmark {symbol} cannot be compared: {reason}")))?;
     let prices = calendar.align(&listing.series);
     let on_run_days: Vec<Option<f64>> = result.days.iter().map(|day| calendar.position(day.day).and_then(|position| prices.at(position))).collect();
-    let first = on_run_days.iter().flatten().next().copied();
-    let values: Vec<Option<f64>> = on_run_days.iter().map(|price| Some(cents(result.capital * (*price)? / first?))).collect();
+    let (Some(first), Some(last)) = (on_run_days.iter().position(Option::is_some), on_run_days.iter().rposition(Option::is_some)) else {
+        return Err(ApiError::invalid_request(format!("the benchmark {symbol} has no prices on the days of the run")));
+    };
+    // Measured from the capital when both start together, as the run's own figures are.
+    let level = if first == 0 { result.capital } else { result.days[first].value };
+    let values: Vec<Option<f64>> = on_run_days.iter().map(|price| Some(cents(level * (*price)? / on_run_days[first]?))).collect();
+    let (first_day, last_day) = (result.days[first].day, result.days[last].day);
+    if first > 0 || last + 1 < result.days.len() {
+        let message = format!("{symbol} has prices from {first_day} to {last_day}, which is less than the run covers. Its figures, and the strategy's return beside them, are for those days only.");
+        warnings.push(json!({ "code": "BENCHMARK_SHORTER", "message": message }));
+    }
     let mut answer = json!(figures);
     answer["symbol"] = json!(symbol);
+    answer["first_day"] = json!(first_day.to_string());
+    answer["last_day"] = json!(last_day.to_string());
+    answer["strategy_return"] = json!(result.days[last].value / level - 1.0);
     answer["values"] = json!(values);
     Ok(answer)
 }
