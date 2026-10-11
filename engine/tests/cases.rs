@@ -2,7 +2,7 @@
 //! kept in files.
 //!
 //! ```text
-//! cases/<name>/strategy.json   the strategy as its canonical tree
+//! cases/<name>/strategy.json   the strategy as its document
 //!              or input.json   a block-tree document, when the case is about import
 //!              run.json        start, end, capital, costs, conventions
 //!              expected.json   what the run must give, and how closely
@@ -23,9 +23,7 @@
 
 use compounder_engine::backtest::{backtest, Backtest, Run};
 use compounder_engine::history::History;
-use compounder_engine::rules::{
-    import_json, Asset, Comparator, Comparison, Condition, Frequency, Indicator, Issue, Market, Node, Operand, Reading, Rebalance, RuleStrategy, Take, Weighting,
-};
+use compounder_engine::rules::{import_json, Asset, Issue, Market, RuleStrategy};
 use compounder_prices::{
     adjust::{adjust, Bar},
     calendar::Calendar,
@@ -57,105 +55,6 @@ fn number(value: &Value, what: &str) -> f64 {
 
 fn list<'a>(value: &'a Value, what: &str) -> &'a Vec<Value> {
     value.as_array().unwrap_or_else(|| panic!("{what} is {value}, not a list"))
-}
-
-fn asset(value: &Value) -> Asset {
-    if let Some(id) = value.get("token") {
-        return Asset::Token { id: text(id, "a token").to_string() };
-    }
-    let market = match text(&value["market"], "a market") {
-        "equities" => Market::Equities,
-        "crypto" => Market::Crypto,
-        other => panic!("{other:?} is not a market"),
-    };
-    Asset::Listed { market, symbol: text(&value["symbol"], "a symbol").to_string() }
-}
-
-fn indicator(value: &Value) -> Indicator {
-    let window = || number(&value["window"], "a window") as u32;
-    match text(&value["indicator"], "an indicator") {
-        "price" => Indicator::Price,
-        "average_price" => Indicator::AveragePrice { window: window() },
-        "exponential_average_price" => Indicator::ExponentialAveragePrice { window: window() },
-        "price_deviation" => Indicator::PriceDeviation { window: window() },
-        "cumulative_return" => Indicator::CumulativeReturn { window: window() },
-        "average_return" => Indicator::AverageReturn { window: window() },
-        "return_deviation" => Indicator::ReturnDeviation { window: window() },
-        "max_drawdown" => Indicator::MaxDrawdown { window: window() },
-        "relative_strength" => Indicator::RelativeStrength { window: window() },
-        other => panic!("{other:?} is not an indicator"),
-    }
-}
-
-fn reading(value: &Value) -> Reading {
-    Reading { indicator: indicator(value), asset: asset(&value["asset"]) }
-}
-
-fn condition(value: &Value) -> Condition {
-    for (word, group) in [("any", Condition::Any as fn(Vec<Condition>) -> Condition), ("all", Condition::All)] {
-        if let Some(parts) = value.get(word) {
-            return group(list(parts, word).iter().map(condition).collect());
-        }
-    }
-    let comparator = match text(&value["compare"], "a comparator") {
-        "above" => Comparator::Above,
-        "at_least" => Comparator::AtLeast,
-        "equal" => Comparator::Equal,
-        "at_most" => Comparator::AtMost,
-        "below" => Comparator::Below,
-        other => panic!("{other:?} is not a comparator"),
-    };
-    let right = match value["right"].get("fixed") {
-        Some(fixed) => Operand::Fixed(number(fixed, "a fixed value")),
-        None => Operand::Reading(reading(&value["right"])),
-    };
-    Condition::Compare(Comparison { left: reading(&value["left"]), comparator, right })
-}
-
-fn nodes(value: &Value) -> Vec<Node> {
-    list(value, "a list of blocks").iter().map(node).collect()
-}
-
-fn node(value: &Value) -> Node {
-    match text(&value["block"], "a block") {
-        "asset" => Node::Asset(asset(&value["asset"])),
-        "weight" => {
-            let weighting = match text(&value["weighting"]["type"], "a weighting") {
-                "equal" => Weighting::Equal,
-                "specified" => Weighting::Specified { shares: list(&value["weighting"]["shares"], "shares").iter().map(|share| number(share, "a share")).collect() },
-                "inverse_volatility" => Weighting::InverseVolatility { window: number(&value["weighting"]["window"], "a window") as u32 },
-                other => panic!("{other:?} is not a weighting"),
-            };
-            Node::Weight { name: None, weighting, children: nodes(&value["children"]) }
-        }
-        "if" => Node::If { condition: condition(&value["condition"]), then: nodes(&value["then"]), otherwise: nodes(&value["else"]) },
-        "filter" => {
-            let take = match text(&value["take"], "a take") {
-                "top" => Take::Top,
-                "bottom" => Take::Bottom,
-                other => panic!("{other:?} is not top or bottom"),
-            };
-            Node::Filter { sort_by: indicator(&value["sort_by"]), take, count: number(&value["count"], "a count") as u32, children: nodes(&value["children"]) }
-        }
-        other => panic!("{other:?} is not a block"),
-    }
-}
-
-/// A strategy from its canonical tree.
-fn strategy(name: &str, value: &Value) -> RuleStrategy {
-    let rebalance = match text(&value["rebalance"]["type"], "a rebalance rule") {
-        "threshold" => Rebalance::Threshold { corridor: number(&value["rebalance"]["corridor"], "a corridor") },
-        "calendar" => Rebalance::Calendar(match text(&value["rebalance"]["frequency"], "a frequency") {
-            "daily" => Frequency::Daily,
-            "weekly" => Frequency::Weekly,
-            "monthly" => Frequency::Monthly,
-            "quarterly" => Frequency::Quarterly,
-            "yearly" => Frequency::Yearly,
-            other => panic!("{other:?} is not a frequency"),
-        }),
-        other => panic!("{other:?} is not a rebalance rule"),
-    };
-    RuleStrategy { name: name.to_string(), rebalance, root: node(&value["root"]) }
 }
 
 /// Every price file of a folder, on the calendar of the days any of them has.
@@ -240,7 +139,7 @@ fn run(folder: &Path, name: &str, history: &History) -> Report {
         run_in: settings["conventions"]["run_in"].as_bool().unwrap_or(false),
     };
     let strategy = if folder.join("strategy.json").exists() {
-        Ok(strategy(name, &json(&folder.join("strategy.json"))))
+        RuleStrategy::from_document(&json(&folder.join("strategy.json")))
     } else {
         import_json(&fs::read_to_string(folder.join("input.json")).unwrap_or_else(|error| panic!("{name}: {error}")))
     };

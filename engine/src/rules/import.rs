@@ -19,7 +19,7 @@ use serde_json::{Map, Value};
 
 /// Deepest JSON nesting a document may have. A block costs two levels and an
 /// if costs four, so every tree that `validate` accepts fits.
-const MAX_NESTING: usize = 512;
+pub(super) const MAX_NESTING: usize = 512;
 /// Most tickers one condition may list.
 const MAX_TICKERS: usize = 50;
 
@@ -193,7 +193,7 @@ fn text_nesting(text: &str) -> usize {
 
 /// The same for a parsed value, walked with a list of its own in place of
 /// the call stack.
-fn nesting(value: &Value) -> usize {
+pub(super) fn nesting(value: &Value) -> usize {
     let mut deepest = 0;
     let mut waiting = vec![(value, 1)];
     while let Some((value, depth)) = waiting.pop() {
@@ -212,7 +212,7 @@ fn nesting(value: &Value) -> usize {
     deepest
 }
 
-fn too_deep() -> Vec<Issue> {
+pub(super) fn too_deep() -> Vec<Issue> {
     vec![Issue {
         code: IssueCode::ExcessiveDepth,
         path: "root".to_string(),
@@ -225,6 +225,13 @@ fn too_deep() -> Vec<Issue> {
 /// document instead when it has any. Import only translates: call `validate`
 /// on the tree to learn whether it can be evaluated.
 pub fn import_json(text: &str) -> Result<RuleStrategy, Vec<Issue>> {
+    import(&parse(text)?)
+}
+
+/// Parse JSON text that may nest as deep as a strategy does. A stock parser
+/// stops far short of that, and one with no limit can be made to run out of
+/// stack, so anything that holds a strategy is parsed here.
+pub fn parse(text: &str) -> Result<Value, Vec<Issue>> {
     // A parser needs stack for every level of nesting it follows, so the
     // depth is checked on the text before anything follows it.
     if text_nesting(text) > MAX_NESTING {
@@ -232,15 +239,14 @@ pub fn import_json(text: &str) -> Result<RuleStrategy, Vec<Issue>> {
     }
     let mut parser = serde_json::Deserializer::from_str(text);
     parser.disable_recursion_limit();
-    match Value::deserialize(&mut parser).and_then(|tree| parser.end().map(|()| tree)) {
-        Ok(tree) => import(&tree),
-        Err(error) => Err(vec![Issue {
+    Value::deserialize(&mut parser).and_then(|tree| parser.end().map(|()| tree)).map_err(|error| {
+        vec![Issue {
             code: IssueCode::InvalidJson,
             path: "root".to_string(),
             message: format!("The document is not valid JSON: {error}."),
             fix: "Send the strategy as one JSON object.".to_string(),
-        }]),
-    }
+        }]
+    })
 }
 
 /// Read a block-tree document that is already parsed.

@@ -1,9 +1,9 @@
 //! Rule-based strategies: a tree of blocks that decides what to hold from
 //! market data, afresh at every rebalance.
 //!
-//! This module is the language only: the typed tree, an importer from the
-//! block-tree JSON that strategy editors write, validation, and a canonical
-//! form with a hash. Nothing here reads a price or picks a holding. The tree
+//! This module is the language only: the typed tree, the document it is
+//! stored and sent as, an importer from the block-tree JSON that strategy
+//! editors write, validation, and a canonical form with a hash. Nothing here reads a price or picks a holding. The tree
 //! is shaped so an evaluator can be built on top without changing it.
 //!
 //! The tree is the meaning of a strategy and nothing more. It has no block
@@ -13,13 +13,15 @@
 //! it: the tree cannot give it back.
 
 use serde::Serialize;
+use std::collections::BTreeSet;
 
 pub(crate) mod canonical;
+mod document;
 mod fixed;
 mod import;
 mod validate;
 
-pub use import::{import, import_json};
+pub use import::{import, import_json, parse as parse_json};
 
 /// The node limit to pass `validate` when no tighter one applies.
 pub const MAX_NODES: usize = 15_000;
@@ -248,6 +250,46 @@ impl RuleStrategy {
     /// comparisons inside a condition are not counted.
     pub fn node_count(&self) -> usize {
         1 + self.root.node_count()
+    }
+}
+
+impl RuleStrategy {
+    /// Every asset the strategy may hold or reads an indicator on, each
+    /// once. These are the assets it needs prices for.
+    pub fn assets(&self) -> Vec<Asset> {
+        let mut assets = BTreeSet::new();
+        let mut waiting = vec![&self.root];
+        while let Some(node) = waiting.pop() {
+            match node {
+                Node::Asset(asset) => {
+                    assets.insert(asset.clone());
+                }
+                Node::Weight { children, .. } | Node::Filter { children, .. } => waiting.extend(children),
+                Node::If { condition, then, otherwise } => {
+                    condition.read(&mut assets);
+                    waiting.extend(then.iter().chain(otherwise));
+                }
+            }
+        }
+        assets.into_iter().collect()
+    }
+}
+
+impl Condition {
+    /// Add every asset the condition reads.
+    fn read(&self, assets: &mut BTreeSet<Asset>) {
+        let mut waiting = vec![self];
+        while let Some(condition) = waiting.pop() {
+            match condition {
+                Condition::Compare(comparison) => {
+                    assets.insert(comparison.left.asset.clone());
+                    if let Operand::Reading(right) = &comparison.right {
+                        assets.insert(right.asset.clone());
+                    }
+                }
+                Condition::Any(parts) | Condition::All(parts) => waiting.extend(parts),
+            }
+        }
     }
 }
 

@@ -16,16 +16,19 @@ impl RuleStrategy {
     /// written down. Validate first: a number that is not finite has no
     /// spelling here and is written as null.
     pub fn canonical_json(&self) -> String {
-        let rebalance = match self.rebalance {
-            Rebalance::Calendar(frequency) => json!({ "type": "calendar", "frequency": frequency.word() }),
-            Rebalance::Threshold { corridor } => json!({ "type": "threshold", "corridor": corridor }),
-        };
-        text(&json!({ "rebalance": rebalance, "root": node(&self.root) }))
+        text(&json!({ "rebalance": rebalance(&self.rebalance), "root": node(&self.root) }))
     }
 
     /// SHA-256 of the canonical text, in hex.
     pub fn hash(&self) -> String {
         Sha256::digest(self.canonical_json().as_bytes()).iter().map(|byte| format!("{byte:02x}")).collect()
+    }
+}
+
+pub(crate) fn rebalance(rebalance: &Rebalance) -> Value {
+    match *rebalance {
+        Rebalance::Calendar(frequency) => json!({ "type": "calendar", "frequency": frequency.word() }),
+        Rebalance::Threshold { corridor } => json!({ "type": "threshold", "corridor": corridor }),
     }
 }
 
