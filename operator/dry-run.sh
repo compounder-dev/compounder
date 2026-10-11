@@ -16,9 +16,11 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 export PATH="$HOME/.foundry/bin:$PATH"
 
-# The node must keep the state of recent blocks for the length of the run.
-FORK_URL="${FORK_URL:-https://bsc-mainnet.public.blastapi.io}"
-ROUTING_API="${ROUTING_API:-https://aggregator-api.kyberswap.com/bsc/api/v1}"
+# FORK_URL is a node of the real chain. It must keep the state of recent
+# blocks for the length of the run. ROUTING_API is the base address of the
+# swap-routing service for that chain.
+: "${FORK_URL:?set FORK_URL to a node of the real chain}"
+: "${ROUTING_API:?set ROUTING_API to the routing service for that chain}"
 RPC=http://127.0.0.1:8546
 CASH=0x55d398326f99059ff775485246999027b3197955
 FEED=0x14032815B65f6B65f23d2532ad5F5DFf7BE48C03
@@ -61,6 +63,8 @@ read -r ADMIN OPERATOR AVA BEN CY < <(cast rpc eth_accounts --rpc-url $RPC | pyt
 # within 5% of a public feed price no older than two days. A quote may
 # normally expire a minute ahead at most. This copy's clock is stopped, so a
 # fresh quote looks dated minutes ahead, and the limit is loosened to an hour.
+# The run itself still works to the real clock: it settles in rounds that
+# each fit inside a quote's real life.
 SETTLEMENT=$(forge create src/Settlement.sol:Settlement --root contracts --rpc-url $RPC --unlocked --from "$ADMIN" --broadcast \
   --constructor-args $CASH $FEED $ISSUER "$ADMIN" "$OPERATOR" 50 3600 500 172800 | awk '/Deployed to:/ {print $3}')
 COLLECTOR=$(call "$SETTLEMENT" "collector()(address)")

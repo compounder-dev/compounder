@@ -195,11 +195,13 @@ fn sell_fills(book: &Book) -> Vec<Fill> {
 
 /// Fill a book whose market leg is a buy.
 ///
-/// The route spends `cash_in` and guarantees at least `min_tokens_out`. The
-/// buyers share those tokens plus everything the sellers offer, in proportion
-/// to their budgets. Fails if the guaranteed price would cost any buyer more
-/// than their budget: the caller should fetch a better route or a smaller one.
-pub fn fill_net_buy(book: &Book, cash_in: U256, min_tokens_out: U256) -> Result<TokenBatch, String> {
+/// The route spends `cash_in`, expects to return `tokens_out` and guarantees
+/// at least `min_tokens_out`. The buyers share those tokens plus everything
+/// the sellers offer, in proportion to their budgets. Fails if the guaranteed
+/// price would cost any buyer more than their budget, or if the tokens the
+/// route expects to deliver would carry the buyers past their targets at the
+/// public price. The caller should then fetch a smaller route.
+pub fn fill_net_buy(book: &Book, public_price: U256, cash_in: U256, min_tokens_out: U256, tokens_out: U256) -> Result<TokenBatch, String> {
     if cash_in.is_zero() || min_tokens_out.is_zero() {
         return Err("the market leg is empty".into());
     }
@@ -207,6 +209,12 @@ pub fn fill_net_buy(book: &Book, cash_in: U256, min_tokens_out: U256) -> Result<
         return Err("a net buy needs buyers".into());
     }
     let budget = book.budget();
+    // Buyers share by budget, so one comparison covers them all. The settlement
+    // contract hands buyers everything the route delivers, not just the least.
+    let delivered = book.sold() + tokens_out.max(min_tokens_out);
+    if mul_div(delivered, public_price, one())? > budget {
+        return Err("the market is cheaper than planned, so this route would carry the buyers past their targets".into());
+    }
     let total = book.sold() + min_tokens_out;
     // The worst price the contract can charge: all the cash for the least tokens.
     let worst_price = mul_div_up(cash_in, one(), min_tokens_out)?;
@@ -288,7 +296,7 @@ pub struct Schedule {
 /// comes, counting what the account holds now plus what its own sells bring
 /// in earlier in the same batch.
 ///
-/// Sell proceeds are counted at the expected price less `band_bps`, so the
+/// Sell proceeds are counted at the expected price less `cushion_bps`, so the
 /// order holds if the market pays a little less. A buyer who still cannot
 /// pay in full is cut to what it will have, or left out if that is under
 /// `min_buy`.
@@ -296,17 +304,17 @@ pub fn schedule(
     books: impl IntoIterator<Item = Book>,
     cash: &BTreeMap<String, U256>,
     prices: &BTreeMap<String, U256>,
-    band_bps: u32,
+    cushion_bps: u32,
     min_buy: U256,
 ) -> Result<Schedule, String> {
-    if band_bps as u64 >= BASIS_POINTS {
-        return Err("the band must be under 100%".into());
+    if cushion_bps as u64 >= BASIS_POINTS {
+        return Err("the cushion must be under 100%".into());
     }
     let mut cash: BTreeMap<String, U256> = cash.iter().map(|(account, amount)| (account.to_ascii_lowercase(), *amount)).collect();
-    // What each seller is sure to receive.
+    // What each seller is counted on to receive.
     let proceeds = |book: &Book| -> Result<Vec<U256>, String> {
-        let price = *prices.get(&book.token).ok_or_else(|| format!("no reference price for {}", book.token))?;
-        let floor_price = mul_div(price, U256::from(BASIS_POINTS - band_bps as u64), U256::from(BASIS_POINTS))?;
+        let price = *prices.get(&book.token).ok_or_else(|| format!("no expected price for {}", book.token))?;
+        let floor_price = mul_div(price, U256::from(BASIS_POINTS - cushion_bps as u64), U256::from(BASIS_POINTS))?;
         book.sells.iter().map(|(_, tokens)| mul_div(*tokens, floor_price, one())).collect()
     };
 
@@ -442,7 +450,7 @@ mod tests {
     fn a_net_buy_shares_every_token_among_buyers_by_budget() {
         let b = book(&[buy("alice", 600.0), buy("bob", 400.0), sell("carol", 1.0)]);
         // The route spends 740 and guarantees 2.9 tokens: a worst price of about 255.17.
-        let batch = fill_net_buy(&b, units(740.0), units(2.9)).unwrap();
+        let batch = fill_net_buy(&b, units(250.0), units(740.0), units(2.9), units(2.96)).unwrap();
         assert!(batch.net_buy);
         assert_eq!(batch.net_quantity, units(2.9));
         assert_eq!(batch.cash_limit, units(740.0));
@@ -456,8 +464,21 @@ mod tests {
     fn a_net_buy_refuses_a_route_too_dear_for_a_buyer() {
         let b = book(&[buy("alice", 600.0), buy("bob", 400.0), sell("carol", 1.0)]);
         // All 750 spent for only 2.9 tokens: 3.9 tokens at 258.63 costs more than the 1,000 set aside.
-        let refusal = fill_net_buy(&b, units(750.0), units(2.9)).unwrap_err();
+        let refusal = fill_net_buy(&b, units(250.0), units(750.0), units(2.9), units(2.9)).unwrap_err();
         assert!(refusal.contains("against a budget"), "{refusal}");
+    }
+
+    #[test]
+    fn a_net_buy_refuses_a_route_that_would_carry_a_buyer_past_its_target() {
+        // Alice has room for 4 tokens at the public price of 250. The leg was sized for a market at 250.
+        let b = book(&[buy("alice", 1_000.0)]);
+        let Leg::Buy { cash_in } = leg(&b, Prices::same(units(250.0)), 100).unwrap() else { panic!("expected a buy") };
+        assert_eq!(cash_in, units(990.0));
+        // The route built a moment later sells at 246: 4.024 tokens, worth 1,006 at the public price.
+        let refusal = fill_net_buy(&b, units(250.0), cash_in, units(4.0), units(4.0244)).unwrap_err();
+        assert!(refusal.contains("past their targets"), "{refusal}");
+        // At 248 it delivers 3.992 tokens, which fits.
+        assert!(fill_net_buy(&b, units(250.0), cash_in, units(3.97), units(3.992)).is_ok());
     }
 
     #[test]
@@ -475,7 +496,7 @@ mod tests {
     #[test]
     fn the_wrong_fill_for_a_book_is_refused() {
         let sellers_only = book(&[sell("alice", 1.0)]);
-        assert!(fill_net_buy(&sellers_only, units(100.0), units(0.4)).is_err());
+        assert!(fill_net_buy(&sellers_only, units(250.0), units(100.0), units(0.4), units(0.4)).is_err());
         let buyers_only = book(&[buy("bob", 250.0)]);
         assert!(fill_net_sell(&buyers_only, Prices::same(units(250.0)), 0, units(1.0)).is_err());
         assert!(leg(&buyers_only, Prices::same(U256::ZERO), 0).is_err());
@@ -515,12 +536,13 @@ mod tests {
             match leg(&b, prices, cushion).unwrap() {
                 Leg::Matched => {}
                 Leg::Buy { cash_in } => {
-                    // A market that fills 0.4% worse than expected.
+                    // A route that expects the estimated price and guarantees one 0.4% worse.
+                    let expected_out = cash_in * one() / prices.market;
                     let min_out = cash_in * one() / (prices.market * U256::from(1_004u64) / U256::from(1_000u64));
                     if min_out.is_zero() {
                         continue;
                     }
-                    let batch = match fill_net_buy(&b, cash_in, min_out) {
+                    let batch = match fill_net_buy(&b, prices.public, cash_in, min_out, expected_out) {
                         Ok(batch) => batch,
                         // A buyer whose share rounds to nothing is a valid refusal.
                         Err(reason) if reason.contains("rounds to nothing") => continue,
@@ -614,7 +636,7 @@ mod tests {
         assert_eq!(plan.deferred[0].given, U256::ZERO);
     }
 
-    /// Replaying any schedule with the worst prices the contract allows, no
+    /// Replaying any schedule with sellers paid the cushioned price, no
     /// account ever runs out of cash, and no sell is lost.
     #[test]
     fn schedules_never_leave_a_buyer_short() {

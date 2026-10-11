@@ -7,10 +7,13 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 export PATH="$HOME/.foundry/bin:$PATH"
 export LIVE=1
-# The node must keep the state of recent blocks for a few minutes. Many public
-# nodes forget it within a minute, which fails a check half way through.
-export FORK_URL="${FORK_URL:-https://bsc-mainnet.public.blastapi.io}"
-ROUTING_API="${ROUTING_API:-https://aggregator-api.kyberswap.com/bsc/api/v1}"
+# FORK_URL is a node of the real chain. It must keep the state of recent
+# blocks for a few minutes: many public nodes forget it within a minute,
+# which fails a check half way through. ROUTING_API is the base address of
+# the swap-routing service for that chain.
+: "${FORK_URL:?set FORK_URL to a node of the real chain}"
+: "${ROUTING_API:?set ROUTING_API to the routing service for that chain}"
+export FORK_URL
 SETTLEMENT=0x5e771e5e771e5e771e5e771e5e771e5e771e5e77
 CASH=0x55d398326f99059ff775485246999027b3197955
 ISSUER=0x91f8Aff3738825e8eB16FC6f6b1A7A4647bDB299

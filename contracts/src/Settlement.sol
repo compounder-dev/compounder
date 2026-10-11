@@ -60,16 +60,20 @@ contract Collector {
 ///           2. A fill may only move a holding toward its target share: sell
 ///              what is above target, buy what is below, and never go past
 ///              the target. A fund that is on target cannot be traded at all,
-///              so a fund can never be traded back and forth.
+///              so a fund can never be traded back and forth. Holdings are
+///              measured at the public feed's prices for this rule.
 ///           3. Everyone in a batch gets the same price for a token: the
 ///              price the batch's own market trade achieved, measured from
 ///              balances, never reported by the caller. A token appears at
 ///              most once in a batch.
 ///           4. That price must sit within a narrow band of a quote the
-///              token's issuer signed for it seconds ago: the price at which
-///              the issuer itself stands ready to trade right now. The quote
-///              in turn must sit within a wider band of the issuer's slower
-///              public price feed. Otherwise the batch is undone.
+///              token's issuer signed for it seconds ago, for the same
+///              direction. The quote in turn must sit within a wider band of
+///              the issuer's slower public price feed. Otherwise the batch
+///              is undone. The quote is a price reference and nothing more:
+///              it need not be for the batch's size, the market trade need
+///              not be made on it, and it may price any number of batches
+///              until it expires.
 ///           5. What a fund gives up is paid for in full, in the same
 ///              transaction.
 ///           6. A fund's traded value is capped by an allowance that holds
@@ -83,7 +87,9 @@ contract Collector {
 ///
 ///         The contract holds funds only inside `settle`. The admin can stop
 ///         the operator or a route at once, but can appoint a new one only
-///         after a two-day delay.
+///         after a two-day delay. The price feed and the issuer are fixed
+///         for good: nobody can point this contract at another source of
+///         prices. If the issuer moves, funds move to a new contract.
 ///
 /// @dev Stock tokens and the cash token are assumed to have 18 decimals, as
 ///      they do on the chain this is written for. Listing checks it.
@@ -158,11 +164,11 @@ contract Settlement {
     error TokenTwice(address token);
     error EmptyFill();
     error PriceUnavailable(address token);
-    error PriceOutOfBand(uint256 price, uint256 lowest, uint256 highest);
+    error PriceOutOfBand(address token, uint256 price, uint256 lowest, uint256 highest);
     error QuoteMismatch(address token);
-    error QuoteNotLive(uint256 expiration);
-    error QuoteNotSigned();
-    error QuoteOutOfBand(uint256 quoted, uint256 feed);
+    error QuoteNotLive(address token, uint256 expiration);
+    error QuoteNotSigned(address token);
+    error QuoteOutOfBand(address token, uint256 quoted, uint256 feed);
     error MarketLegShort(uint256 expected, uint256 got);
     error LeftShort(address token, uint256 before, uint256 afterwards);
     error TokenCallFailed(address token);
@@ -205,7 +211,7 @@ contract Settlement {
     ///         quotes live for seconds, so one dated further ahead is not one of them.
     uint256 public immutable maxQuoteLife;
     /// @notice How far the issuer's quote may sit from the feed price, in basis points.
-    uint256 public immutable maxDeviationBps;
+    uint256 public immutable feedBandBps;
     /// @notice The oldest feed price a fund may be valued at, in seconds.
     uint256 public immutable maxPriceAge;
     /// @notice Can stop the operator or a route at once and appoint new ones after `DELAY`.
@@ -246,13 +252,15 @@ contract Settlement {
         address operator_,
         uint256 quoteBandBps_,
         uint256 maxQuoteLife_,
-        uint256 maxDeviationBps_,
+        uint256 feedBandBps_,
         uint256 maxPriceAge_
     ) {
         if (cash_ == address(0) || priceFeed_ == address(0) || issuer_ == address(0)) revert ZeroAddress();
         if (admin_ == address(0) || operator_ == address(0)) revert ZeroAddress();
-        if (quoteBandBps_ == 0 || quoteBandBps_ > maxDeviationBps_ || maxDeviationBps_ >= BPS) revert BadConfig();
+        if (quoteBandBps_ == 0 || quoteBandBps_ > feedBandBps_ || feedBandBps_ >= BPS) revert BadConfig();
         if (maxQuoteLife_ == 0 || maxPriceAge_ == 0) revert BadConfig();
+        // Quotes are signed for the issuer's own domain. An address that cannot name one is not the issuer.
+        if (issuer_.code.length == 0 || IIssuer(issuer_).getDomainSeparator() == bytes32(0)) revert BadConfig();
         _requireEighteenDecimals(cash_);
         cash = cash_;
         priceFeed = IPriceFeed(priceFeed_);
@@ -261,7 +269,7 @@ contract Settlement {
         maxQuoteLife = maxQuoteLife_;
         admin = admin_;
         operator = operator_;
-        maxDeviationBps = maxDeviationBps_;
+        feedBandBps = feedBandBps_;
         maxPriceAge = maxPriceAge_;
         collector = new Collector();
         emit OperatorSet(operator_);
@@ -292,11 +300,14 @@ contract Settlement {
             total += targetShares[i];
         }
         if (total > WHOLE) revert BadTargets();
+        // A first opening starts with the whole limit. Opening again carries
+        // over what is left, so the limit cannot be refilled by re-opening.
+        uint256 left = epoch == 1 ? dailyLimit : _limitLeft(account);
         _tokens[msg.sender] = tokens;
         account.open = true;
         account.epoch = epoch;
         account.dailyLimit = dailyLimit;
-        account.limitLeft = dailyLimit;
+        account.limitLeft = left < dailyLimit ? left : dailyLimit;
         account.limitAt = uint64(block.timestamp);
         emit Opened(msg.sender, dailyLimit, tokens, targetShares);
     }
@@ -451,7 +462,7 @@ contract Settlement {
         // The price the market really gave: what was spent, over everything
         // it delivered. Never more than `worstPrice`.
         price = _ceilDiv(spent * ONE, received);
-        if (price < band.lowest || price > band.highest) revert PriceOutOfBand(price, band.lowest, band.highest);
+        if (price < band.lowest || price > band.highest) revert PriceOutOfBand(trade.token, price, band.lowest, band.highest);
 
         // Buyers owe the market's cash plus what the sellers are paid.
         _payBuyers(trade, bought, spent + _floorValue(sold, price), worstPrice, received - net, band.feed);
@@ -491,7 +502,7 @@ contract Settlement {
         if (spent != net) revert MarketLegShort(net, spent);
         if (received < trade.cashLimit) revert MarketLegShort(trade.cashLimit, received);
         price = (received * ONE) / net;
-        if (price < band.lowest || price > band.highest) revert PriceOutOfBand(price, band.lowest, band.highest);
+        if (price < band.lowest || price > band.highest) revert PriceOutOfBand(trade.token, price, band.lowest, band.highest);
 
         for (uint256 i = 0; i < trade.buys.length; i++) {
             Fill calldata fill = trade.buys[i];
@@ -613,8 +624,8 @@ contract Settlement {
     function _band(Trade calldata trade) private view returns (Band memory band) {
         band.feed = _feedPrice(trade.token);
         uint256 quoted = _quotedPrice(trade);
-        if (quoted * BPS < band.feed * (BPS - maxDeviationBps) || quoted * BPS > band.feed * (BPS + maxDeviationBps)) {
-            revert QuoteOutOfBand(quoted, band.feed);
+        if (quoted * BPS < band.feed * (BPS - feedBandBps) || quoted * BPS > band.feed * (BPS + feedBandBps)) {
+            revert QuoteOutOfBand(trade.token, quoted, band.feed);
         }
         band.lowest = (quoted * (BPS - quoteBandBps)) / BPS;
         band.highest = (quoted * (BPS + quoteBandBps)) / BPS;
@@ -629,15 +640,15 @@ contract Settlement {
             revert QuoteMismatch(trade.token);
         }
         if (block.timestamp > quote.expiration || quote.expiration - block.timestamp > maxQuoteLife) {
-            revert QuoteNotLive(quote.expiration);
+            revert QuoteNotLive(trade.token, quote.expiration);
         }
         bytes calldata signature = trade.quoteSignature;
-        if (signature.length != 65 || uint256(bytes32(signature[32:64])) > HALF_ORDER) revert QuoteNotSigned();
+        if (signature.length != 65 || uint256(bytes32(signature[32:64])) > HALF_ORDER) revert QuoteNotSigned(trade.token);
         bytes32 digest =
             keccak256(abi.encodePacked("\x19\x01", issuer.getDomainSeparator(), keccak256(abi.encode(QUOTE_TYPEHASH, quote))));
         address signer = ecrecover(digest, uint8(signature[64]), bytes32(signature[0:32]), bytes32(signature[32:64]));
         // Whoever the issuer lets sign today. A change of key on its side needs nothing here.
-        if (signer == address(0) || !issuer.hasRole(QUOTE_SIGNER_ROLE, signer)) revert QuoteNotSigned();
+        if (signer == address(0) || !issuer.hasRole(QUOTE_SIGNER_ROLE, signer)) revert QuoteNotSigned(trade.token);
         return quote.price;
     }
 
