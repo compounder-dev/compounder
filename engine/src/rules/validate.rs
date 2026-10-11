@@ -104,7 +104,8 @@ impl Check {
     fn weighting(&mut self, weighting: &Weighting, children: usize) {
         match weighting {
             Weighting::Equal => {}
-            Weighting::InverseVolatility { window } => self.window(*window),
+            // It is the deviation of returns that weighs the children.
+            Weighting::InverseVolatility { window } => self.window(*window, Indicator::ReturnDeviation { window: *window }.least_window()),
             Weighting::Specified { shares } => {
                 if shares.len() != children {
                     self.trail.report(
@@ -191,16 +192,17 @@ impl Check {
 
     fn indicator(&mut self, indicator: &Indicator) {
         if let Some(window) = indicator.window() {
-            self.window(window);
+            self.window(window, indicator.least_window());
         }
     }
 
-    fn window(&mut self, window: u32) {
-        if window == 0 || window > MAX_WINDOW {
+    /// `least` is the shortest window the indicator has a meaning over.
+    fn window(&mut self, window: u32, least: u32) {
+        if window < least || window > MAX_WINDOW {
             self.trail.report(
                 IssueCode::InvalidWindow,
-                format!("A window of {window} days is not from 1 to {MAX_WINDOW}."),
-                format!("Use a window from 1 to {MAX_WINDOW} days."),
+                format!("A window of {window} days is not from {least} to {MAX_WINDOW}."),
+                format!("Use a window from {least} to {MAX_WINDOW} days."),
             );
         }
     }
@@ -353,7 +355,7 @@ mod tests {
     #[test]
     fn a_window_runs_from_one_day_to_one_thousand() {
         let inverse = |window| Node::Weight { name: None, weighting: Weighting::InverseVolatility { window }, children: vec![asset("SPY"), asset("TLT")] };
-        for good in [1, 20, 1000] {
+        for good in [2, 20, 1000] {
             assert!(found(inverse(good)).is_empty(), "{good}");
             assert!(found(filter(Indicator::CumulativeReturn { window: good }, 1, vec![asset("SPY"), asset("TLT")])).is_empty(), "{good}");
             assert!(found(when(above(Indicator::MaxDrawdown { window: good }, 0.1))).is_empty(), "{good}");
@@ -366,6 +368,23 @@ mod tests {
             let against = Condition::Compare(Comparison { left: reading(Indicator::Price, "SPY"), comparator: Comparator::Above, right });
             assert_eq!(found(when(against)), at(IssueCode::InvalidWindow, "root.condition.right"), "{bad}");
         }
+    }
+
+    #[test]
+    fn a_deviation_a_drawdown_and_relative_strength_need_two_days() {
+        // A one day average is the price and a one day return is a return.
+        for one_day in [Indicator::AveragePrice { window: 1 }, Indicator::ExponentialAveragePrice { window: 1 }, Indicator::CumulativeReturn { window: 1 }, Indicator::AverageReturn { window: 1 }] {
+            assert!(found(when(above(one_day, 0.0))).is_empty(), "{one_day:?}");
+        }
+        for two_days in [Indicator::PriceDeviation { window: 1 }, Indicator::ReturnDeviation { window: 1 }, Indicator::MaxDrawdown { window: 1 }, Indicator::RelativeStrength { window: 1 }] {
+            let issues = strategy(when(above(two_days, 0.0))).validate(MAX_NODES);
+            assert_eq!(issues.iter().map(|issue| (issue.code, issue.path.as_str())).collect::<Vec<_>>(), vec![(IssueCode::InvalidWindow, "root.condition.left")], "{two_days:?}");
+            assert_eq!(issues[0].message, "A window of 1 days is not from 2 to 1000.");
+            assert_eq!(codes(filter(two_days, 1, vec![asset("SPY"), asset("TLT")])), vec![IssueCode::InvalidWindow], "{two_days:?}");
+        }
+        // Inverse volatility weighs by the deviation of returns.
+        let inverse = Node::Weight { name: None, weighting: Weighting::InverseVolatility { window: 1 }, children: vec![asset("SPY"), asset("TLT")] };
+        assert_eq!(found(inverse), at(IssueCode::InvalidWindow, "root"));
     }
 
     #[test]

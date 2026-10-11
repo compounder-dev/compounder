@@ -230,6 +230,16 @@ impl Indicator {
             | Indicator::RelativeStrength { window } => Some(window),
         }
     }
+
+    /// The shortest window it has a meaning over. One value has no
+    /// deviation, one close has no fall inside it, and relative strength
+    /// needs a change to average.
+    pub fn least_window(&self) -> u32 {
+        match self {
+            Indicator::PriceDeviation { .. } | Indicator::ReturnDeviation { .. } | Indicator::MaxDrawdown { .. } | Indicator::RelativeStrength { .. } => 2,
+            _ => 1,
+        }
+    }
 }
 
 impl RuleStrategy {
