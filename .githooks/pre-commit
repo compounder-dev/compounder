@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Refuse a commit whose added lines look like a secret.
+set -euo pipefail
+
+patterns='BEGIN [A-Z ]*PRIVATE KEY|ghp_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|sk-[A-Za-z0-9_-]{24,}|AKIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,}|(private[_-]?key|secret|mnemonic|seed[_-]?phrase|api[_-]?key|auth[_-]?token|password)["'"'"']?[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9+/_=-]{16,}|(^|[^0-9a-fA-Fx])(0x)?[0-9a-fA-F]{64}($|[^0-9a-fA-F])'
+
+# Lock files carry long hashes that are not secrets.
+hits=$(git diff --cached --unified=0 --no-color -- . ':(exclude)*.lock' ':(exclude)*package-lock.json' \
+  | grep -E '^\+' | grep -vE '^\+\+\+' | grep -nEi -- "$patterns" || true)
+
+if [ -n "$hits" ]; then
+  echo "Commit blocked: these added lines look like secrets." >&2
+  echo "$hits" | cut -c1-120 >&2
+  echo "Remove them, or keep the value in an ignored .env file." >&2
+  exit 1
+fi
