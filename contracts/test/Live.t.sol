@@ -39,27 +39,44 @@ contract LiveTest is Test {
         address where = vm.parseJsonAddress(fixture, ".settlement");
 
         // Batch prices must sit within 1% of the public feed.
-        deployCodeTo("Settlement.sol:Settlement", abi.encode(cash, FEED, admin, operator, uint256(100), uint256(48 hours)), where);
+        deployCodeTo(
+            "Settlement.sol:Settlement", abi.encode(cash, FEED, admin, operator, uint256(100), uint256(48 hours)), where
+        );
         settlement = Settlement(where);
         collector = settlement.collector();
-        vm.startPrank(admin);
-        settlement.setRouter(vm.parseJsonAddress(fixture, ".buy.router"), true);
-        settlement.setRouter(vm.parseJsonAddress(fixture, ".sell.router"), true);
-        vm.stopPrank();
+        // A route normally waits two days. The delay is set aside here, because
+        // moving this copy of the chain two days ahead would make the real
+        // price feed and the fetched routes stale.
+        _allowRoute(vm.parseJsonAddress(fixture, ".buy.router"));
+        _allowRoute(vm.parseJsonAddress(fixture, ".sell.router"));
 
-        _join(alice);
-        _join(bob);
+        _join(alice, 900_000_000);
+        _join(bob, 900_000_000);
     }
 
-    function _join(address who) private {
+    function _allowRoute(address route) private {
+        bytes32 slot = keccak256(abi.encode(route, uint256(3))); // isRouter[route]
+        vm.store(address(settlement), slot, bytes32(uint256(1)));
+        require(settlement.isRouter(route), "the route flag is not where this test expects it");
+    }
+
+    /// Give an account cash, approve the collector and open a fund whose target share of the stock is `share`, out of one billion.
+    function _join(address who, uint256 share) private {
         deal(cash, who, 1_000e18);
-        address[] memory tokens = new address[](1);
-        tokens[0] = token;
         vm.startPrank(who);
         IToken(cash).approve(address(collector), type(uint256).max);
         IToken(token).approve(address(collector), type(uint256).max);
-        settlement.open(tokens, 10_000e18);
         vm.stopPrank();
+        _open(who, share);
+    }
+
+    function _open(address who, uint256 share) private {
+        address[] memory tokens = new address[](1);
+        tokens[0] = token;
+        uint256[] memory targets = new uint256[](1);
+        targets[0] = share;
+        vm.prank(who);
+        settlement.open(tokens, targets, 10_000e18);
     }
 
     function _settle(Settlement.Trade memory trade) private returns (uint256 gasUsed) {
@@ -71,8 +88,8 @@ contract LiveTest is Test {
         gasUsed = before - gasleft();
     }
 
-    // Each check runs on its own fresh copy of the chain, so it finishes
-    // before a public node forgets the block it started from.
+    // Each check runs on its own fresh copy of the chain, with routes fetched
+    // seconds before it.
 
     function _logFeed() private view {
         (uint256 feedPrice, uint64 updated,,) = IPriceFeed(FEED).prices(token);
@@ -118,6 +135,7 @@ contract LiveTest is Test {
     function test_live_oneSellsOneBuysTheRestGoesToMarket() public {
         _logFeed();
         deal(token, alice, 1e18);
+        _open(alice, 0); // Alice's fund is getting out of the stock
         uint256 netSell = vm.parseJsonUint(fixture, ".sell.amountIn");
         uint256 aliceSells = netSell + 1e17;
         Settlement.Fill[] memory matchedBuy = new Settlement.Fill[](1);

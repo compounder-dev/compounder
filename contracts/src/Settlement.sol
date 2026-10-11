@@ -39,28 +39,37 @@ contract Collector {
 }
 
 /// @title Settlement
-/// @notice Trades stock tokens for many accounts in one transaction, at one
-///         price per token.
+/// @notice Rebalances many funds in one transaction, at one price per token.
 ///
-///         An account opts in by approving the collector for the tokens it
-///         wants traded and calling `open` with those tokens and a daily
-///         limit. From then on the operator can include the account in a
-///         batch, and every fill for it obeys rules the operator cannot bend:
-///           1. Only tokens the account listed are touched.
-///           2. Everyone in a batch gets the same price for a token: the
+///         A fund is any account that opts in. It approves the collector for
+///         its tokens and calls `open` with the tokens it holds, the share of
+///         the fund each one should be, and a daily limit. Shares are whole
+///         numbers out of one billion, exactly as the strategy engine gives
+///         them. From then on the
+///         operator can include it in a batch, and every fill for it obeys
+///         rules the operator cannot bend:
+///           1. Only tokens the fund listed are touched.
+///           2. A fill may only move a holding toward its target share: sell
+///              what is above target, buy what is below, and never go past
+///              the target. A fund that is on target cannot be traded at all,
+///              so a fund can never be traded back and forth.
+///           3. Everyone in a batch gets the same price for a token: the
 ///              price the batch's own market trade achieved, measured from
 ///              balances, never reported by the caller.
-///           3. That price must sit within a fixed band of a public price
+///           4. That price must sit within a fixed band of a public price
 ///              feed that is fresh. Otherwise the batch is undone.
-///           4. What an account gives up is paid for in full, in the same
+///           5. What a fund gives up is paid for in full, in the same
 ///              transaction.
-///           5. An account's traded value per day never passes its limit.
+///           6. A fund's traded value never passes its daily limit, counted
+///              over a rolling day.
 ///
 ///         Buys and sells of one token are matched against each other first.
 ///         Only the difference is traded on the open market, through an
 ///         approved route. If any step fails, nothing moves for anyone.
 ///
-///         The contract holds funds only inside `settle`.
+///         The contract holds funds only inside `settle`. The admin can stop
+///         the operator or a route at once, but can appoint a new one only
+///         after a two-day delay.
 ///
 /// @dev Stock tokens and the cash token are assumed to have 18 decimals, as
 ///      they do on the chain this is written for. Listing checks it.
@@ -88,19 +97,29 @@ contract Settlement {
 
     struct Account {
         bool open;
-        uint64 day; // the day `usedToday` counts
-        uint256 dailyLimit; // cash value tradable per day
-        uint256 usedToday;
+        uint32 epoch; // bumps on every `open`, so an old token list can never be read
+        uint64 limitAt; // when `limitLeft` was last brought up to date
+        uint256 dailyLimit; // cash value tradable per rolling day
+        uint256 limitLeft;
+    }
+
+    /// @dev What the public feed allows for one token right now.
+    struct Band {
+        uint256 feed;
+        uint256 lowest;
+        uint256 highest;
     }
 
     error NotOperator();
     error NotAdmin();
     error ZeroAddress();
     error BadConfig();
+    error BadTargets();
     error WrongDecimals(address token);
     error AccountNotOpen(address account);
     error TokenNotListed(address account, address token);
-    error DailyLimitExceeded(address account, uint256 wouldUse, uint256 limit);
+    error PastTarget(address account, address token, uint256 valueAfter, uint256 target);
+    error DailyLimitExceeded(address account, uint256 value, uint256 left);
     error RouterNotAllowed(address router);
     error NetQuantityMismatch(uint256 expected, uint256 stated);
     error EmptyFill();
@@ -109,19 +128,26 @@ contract Settlement {
     error MarketLegShort(uint256 expected, uint256 got);
     error LeftShort(address token, uint256 before, uint256 afterwards);
     error TokenCallFailed(address token);
+    error NotReady();
     error Reentered();
 
-    event Opened(address indexed account, uint256 dailyLimit);
+    event Opened(address indexed account, uint256 dailyLimit, address[] tokens, uint256[] targetShares);
     event Closed(address indexed account);
-    event TokenListed(address indexed account, address indexed token, bool listed);
     event DailyLimitSet(address indexed account, uint256 dailyLimit);
+    event OperatorProposed(address indexed operator, uint256 readyAt);
     event OperatorSet(address indexed operator);
+    event RouterProposed(address indexed router, uint256 readyAt);
     event RouterSet(address indexed router, bool allowed);
     event Filled(address indexed account, address indexed token, bool buy, uint256 quantity, uint256 cash);
     event Settled(address indexed token, uint256 price, bool netBuy, uint256 netQuantity, uint256 bought, uint256 sold);
 
     uint256 private constant ONE = 1e18;
     uint256 private constant BPS = 10_000;
+    /// @notice A target share of this much is the whole fund.
+    uint256 public constant WHOLE = 1_000_000_000;
+    uint256 public constant MAX_TOKENS = 32;
+    /// @notice How long a new operator or route waits before it can act.
+    uint256 public constant DELAY = 2 days;
 
     address public immutable cash;
     IPriceFeed public immutable priceFeed;
@@ -130,15 +156,22 @@ contract Settlement {
     uint256 public immutable maxDeviationBps;
     /// @notice The oldest feed price a batch may rely on, in seconds.
     uint256 public immutable maxPriceAge;
-    /// @notice Can replace the operator and approve routes. Has no power over funds.
+    /// @notice Can stop the operator or a route at once and appoint new ones after `DELAY`.
     address public immutable admin;
     /// @notice The only caller of `settle`.
     address public operator;
+    address public pendingOperator;
+    uint256 public pendingOperatorAt;
 
     mapping(address => bool) public isRouter;
+    mapping(address => uint256) public routerReadyAt;
     mapping(address => Account) public accounts;
-    mapping(address => mapping(address => bool)) public listed;
+    mapping(address => address[]) private _tokens;
+    /// @dev Target share out of `WHOLE`, plus one. Zero means not listed.
+    mapping(address => mapping(uint32 => mapping(address => uint256))) private _targetPlusOne;
 
+    /// @dev Counts batches, so a fund value cached for one batch is never read by another.
+    uint256 private _batch;
     uint256 private _entered = 1;
 
     modifier nonReentrant() {
@@ -148,7 +181,19 @@ contract Settlement {
         _entered = 1;
     }
 
-    constructor(address cash_, address priceFeed_, address admin_, address operator_, uint256 maxDeviationBps_, uint256 maxPriceAge_) {
+    modifier onlyAdmin() {
+        if (msg.sender != admin) revert NotAdmin();
+        _;
+    }
+
+    constructor(
+        address cash_,
+        address priceFeed_,
+        address admin_,
+        address operator_,
+        uint256 maxDeviationBps_,
+        uint256 maxPriceAge_
+    ) {
         if (cash_ == address(0) || priceFeed_ == address(0) || admin_ == address(0) || operator_ == address(0)) {
             revert ZeroAddress();
         }
@@ -164,18 +209,35 @@ contract Settlement {
         emit OperatorSet(operator_);
     }
 
-    // ---- the account's own controls ----
+    // ---- the fund's own controls ----
 
-    /// @notice Opt in. The caller is the account. It must also approve the
-    ///         collector for the cash token and each listed token.
-    function open(address[] calldata tokens, uint256 dailyLimit) external {
+    /// @notice Opt in, or replace the fund's whole setup. The caller is the
+    ///         fund. `targetShares[i]` is the share of the fund `tokens[i]`
+    ///         should be, out of `WHOLE`; whatever the shares leave over is
+    ///         the cash share.
+    ///         The fund must also approve the collector for the cash token
+    ///         and each listed token.
+    function open(address[] calldata tokens, uint256[] calldata targetShares, uint256 dailyLimit) external {
+        if (tokens.length != targetShares.length || tokens.length > MAX_TOKENS || dailyLimit > type(uint128).max) revert BadTargets();
         Account storage account = accounts[msg.sender];
-        account.open = true;
-        account.dailyLimit = dailyLimit;
-        emit Opened(msg.sender, dailyLimit);
+        uint32 epoch = account.epoch + 1;
+        uint256 total;
         for (uint256 i = 0; i < tokens.length; i++) {
-            _list(tokens[i], true);
+            address token = tokens[i];
+            if (token == cash || _targetPlusOne[msg.sender][epoch][token] != 0) revert BadTargets();
+            _requireEighteenDecimals(token);
+            if (targetShares[i] > WHOLE) revert BadTargets();
+            _targetPlusOne[msg.sender][epoch][token] = targetShares[i] + 1;
+            total += targetShares[i];
         }
+        if (total > WHOLE) revert BadTargets();
+        _tokens[msg.sender] = tokens;
+        account.open = true;
+        account.epoch = epoch;
+        account.dailyLimit = dailyLimit;
+        account.limitLeft = dailyLimit;
+        account.limitAt = uint64(block.timestamp);
+        emit Opened(msg.sender, dailyLimit, tokens, targetShares);
     }
 
     /// @notice Opt out. Takes effect at once; revoking approvals does too.
@@ -184,34 +246,72 @@ contract Settlement {
         emit Closed(msg.sender);
     }
 
-    function setListed(address token, bool isListed) external {
-        _list(token, isListed);
+    function setDailyLimit(uint256 dailyLimit) external {
+        if (dailyLimit > type(uint128).max) revert BadTargets();
+        Account storage account = accounts[msg.sender];
+        uint256 left = _limitLeft(account);
+        account.dailyLimit = dailyLimit;
+        account.limitLeft = left < dailyLimit ? left : dailyLimit;
+        account.limitAt = uint64(block.timestamp);
+        emit DailyLimitSet(msg.sender, dailyLimit);
     }
 
-    function setDailyLimit(uint256 dailyLimit) external {
-        accounts[msg.sender].dailyLimit = dailyLimit;
-        emit DailyLimitSet(msg.sender, dailyLimit);
+    function tokensOf(address account) external view returns (address[] memory) {
+        return _tokens[account];
+    }
+
+    /// @notice Whether `account` lists `token`, and its target share out of `WHOLE`.
+    function targetOf(address account, address token) external view returns (bool isListed, uint256 targetShare) {
+        uint256 plusOne = _targetPlusOne[account][accounts[account].epoch][token];
+        return plusOne == 0 ? (false, 0) : (true, plusOne - 1);
     }
 
     // ---- admin ----
 
-    function setOperator(address newOperator) external {
-        if (msg.sender != admin) revert NotAdmin();
-        if (newOperator == address(0)) revert ZeroAddress();
-        operator = newOperator;
-        emit OperatorSet(newOperator);
+    /// @notice Stop all trading at once.
+    function removeOperator() external onlyAdmin {
+        operator = address(0);
+        pendingOperator = address(0);
+        emit OperatorSet(address(0));
     }
 
-    /// @notice Approve or remove a trading route. The collector, the cash
-    ///         token and this contract can never be routes, so a route call
-    ///         can never be turned into a pull from an account.
-    function setRouter(address router, bool allowed) external {
-        if (msg.sender != admin) revert NotAdmin();
-        if (allowed && (router == address(0) || router == address(collector) || router == cash || router == address(this))) {
+    function proposeOperator(address next) external onlyAdmin {
+        if (next == address(0)) revert ZeroAddress();
+        pendingOperator = next;
+        pendingOperatorAt = block.timestamp + DELAY;
+        emit OperatorProposed(next, pendingOperatorAt);
+    }
+
+    /// @notice Anyone may complete a proposal once its delay has passed.
+    function activateOperator() external {
+        if (pendingOperator == address(0) || block.timestamp < pendingOperatorAt) revert NotReady();
+        operator = pendingOperator;
+        pendingOperator = address(0);
+        emit OperatorSet(operator);
+    }
+
+    /// @notice Propose a trading route. The collector, the cash token and
+    ///         this contract can never be routes, so a route call can never
+    ///         be turned into a pull from a fund.
+    function proposeRouter(address router) external onlyAdmin {
+        if (router == address(0) || router == address(collector) || router == cash || router == address(this)) {
             revert RouterNotAllowed(router);
         }
-        isRouter[router] = allowed;
-        emit RouterSet(router, allowed);
+        routerReadyAt[router] = block.timestamp + DELAY;
+        emit RouterProposed(router, routerReadyAt[router]);
+    }
+
+    function activateRouter(address router) external {
+        if (routerReadyAt[router] == 0 || block.timestamp < routerReadyAt[router]) revert NotReady();
+        routerReadyAt[router] = 0;
+        isRouter[router] = true;
+        emit RouterSet(router, true);
+    }
+
+    function removeRouter(address router) external onlyAdmin {
+        isRouter[router] = false;
+        routerReadyAt[router] = 0;
+        emit RouterSet(router, false);
     }
 
     // ---- settlement ----
@@ -219,6 +319,7 @@ contract Settlement {
     /// @notice Settle a batch. Each trade covers one token.
     function settle(Trade[] calldata trades) external nonReentrant {
         if (msg.sender != operator) revert NotOperator();
+        _batch++;
         uint256 cashBefore = IERC20(cash).balanceOf(address(this));
         for (uint256 i = 0; i < trades.length; i++) {
             _settleToken(trades[i]);
@@ -234,13 +335,14 @@ contract Settlement {
         address token = trade.token;
         if (token == cash || trade.netQuantity == 0) revert NetQuantityMismatch(0, trade.netQuantity);
         if (!isRouter[trade.router] || trade.router == token) revert RouterNotAllowed(trade.router);
-        (uint256 lowest, uint256 highest) = _band(token);
+        Band memory band = _band(token);
         uint256 tokenBefore = IERC20(token).balanceOf(address(this));
 
         uint256 sold;
         for (uint256 i = 0; i < trade.sells.length; i++) {
             Fill calldata fill = trade.sells[i];
             if (fill.quantity == 0) revert EmptyFill();
+            _towardTarget(fill.account, token, band.feed, fill.quantity, false);
             collector.collect(token, fill.account, fill.quantity);
             sold += fill.quantity;
         }
@@ -250,14 +352,12 @@ contract Settlement {
             bought += trade.buys[i].quantity;
         }
 
-        uint256 price = trade.netBuy
-            ? _buyOnMarket(trade, bought, sold, lowest, highest)
-            : _sellOnMarket(trade, bought, sold, lowest, highest);
+        uint256 price = trade.netBuy ? _buyOnMarket(trade, bought, sold, band) : _sellOnMarket(trade, bought, sold, band);
 
         for (uint256 i = 0; i < trade.sells.length; i++) {
             Fill calldata fill = trade.sells[i];
             uint256 proceeds = _floorValue(fill.quantity, price);
-            _spend(fill.account, token, proceeds);
+            _spend(fill.account, proceeds);
             _push(cash, fill.account, proceeds);
             emit Filled(fill.account, token, false, fill.quantity, proceeds);
         }
@@ -270,34 +370,35 @@ contract Settlement {
     /// @dev Buyers outnumber sellers. Collect each buyer's worst-case cost,
     ///      buy the difference on the market, then charge everyone the price
     ///      that trade achieved and refund the rest.
-    function _buyOnMarket(Trade calldata trade, uint256 bought, uint256 sold, uint256 lowest, uint256 highest)
-        private
-        returns (uint256 price)
-    {
+    function _buyOnMarket(Trade calldata trade, uint256 bought, uint256 sold, Band memory band) private returns (uint256 price) {
         uint256 net = trade.netQuantity;
         if (bought <= sold || bought - sold != net) revert NetQuantityMismatch(bought > sold ? bought - sold : 0, net);
         // The most the caller is willing to pay per token must already be inside the band.
         uint256 worstPrice = _ceilDiv(trade.cashLimit * ONE, net);
-        if (worstPrice > highest) revert PriceOutOfBand(worstPrice, lowest, highest);
+        if (worstPrice > band.highest) revert PriceOutOfBand(worstPrice, band.lowest, band.highest);
 
         for (uint256 i = 0; i < trade.buys.length; i++) {
-            collector.collect(cash, trade.buys[i].account, _ceilValue(trade.buys[i].quantity, worstPrice));
+            Fill calldata fill = trade.buys[i];
+            // Checked before the buyer's cash moves, so the fund is valued whole.
+            _towardTarget(fill.account, trade.token, band.feed, fill.quantity, true);
+            collector.collect(cash, fill.account, _ceilValue(fill.quantity, worstPrice));
         }
 
         (uint256 spent, uint256 received) = _callRouter(trade, cash, trade.cashLimit, trade.token);
         if (received < net) revert MarketLegShort(net, received);
         price = _ceilDiv(spent * ONE, net);
-        if (price < lowest || price > highest) revert PriceOutOfBand(price, lowest, highest);
+        if (price < band.lowest || price > band.highest) revert PriceOutOfBand(price, band.lowest, band.highest);
 
-        _payBuyers(trade, bought, price, worstPrice, received - net);
+        _payBuyers(trade, bought, price, worstPrice, received - net, band.feed);
     }
 
     /// @dev Charge each buyer the batch price, refund what was collected
     ///      beyond it, and deliver the tokens. `surplus` is tokens the market
     ///      delivered beyond the difference: a better fill than asked for.
     ///      Buyers share it by size and the last buyer takes the rounding
-    ///      remainder, so no token is left behind.
-    function _payBuyers(Trade calldata trade, uint256 bought, uint256 price, uint256 worstPrice, uint256 surplus) private {
+    ///      remainder, so no token is left behind. The target is checked
+    ///      again here against what each buyer really receives.
+    function _payBuyers(Trade calldata trade, uint256 bought, uint256 price, uint256 worstPrice, uint256 surplus, uint256 feed) private {
         uint256 surplusLeft = surplus;
         uint256 last = trade.buys.length - 1;
         for (uint256 i = 0; i <= last; i++) {
@@ -305,7 +406,8 @@ contract Settlement {
             uint256 cost = _ceilValue(fill.quantity, price);
             uint256 extra = i == last ? surplusLeft : (surplus * fill.quantity) / bought;
             surplusLeft -= extra;
-            _spend(fill.account, trade.token, cost);
+            _towardTarget(fill.account, trade.token, feed, fill.quantity + extra, true);
+            _spend(fill.account, cost);
             _push(cash, fill.account, _ceilValue(fill.quantity, worstPrice) - cost);
             _push(trade.token, fill.account, fill.quantity + extra);
             emit Filled(fill.account, trade.token, true, fill.quantity, cost);
@@ -314,10 +416,7 @@ contract Settlement {
 
     /// @dev Sellers outnumber buyers. Sell the difference on the market, then
     ///      charge buyers and pay sellers the price that trade achieved.
-    function _sellOnMarket(Trade calldata trade, uint256 bought, uint256 sold, uint256 lowest, uint256 highest)
-        private
-        returns (uint256 price)
-    {
+    function _sellOnMarket(Trade calldata trade, uint256 bought, uint256 sold, Band memory band) private returns (uint256 price) {
         uint256 net = trade.netQuantity;
         if (sold <= bought || sold - bought != net) revert NetQuantityMismatch(sold > bought ? sold - bought : 0, net);
 
@@ -325,12 +424,13 @@ contract Settlement {
         if (spent != net) revert MarketLegShort(net, spent);
         if (received < trade.cashLimit) revert MarketLegShort(trade.cashLimit, received);
         price = (received * ONE) / net;
-        if (price < lowest || price > highest) revert PriceOutOfBand(price, lowest, highest);
+        if (price < band.lowest || price > band.highest) revert PriceOutOfBand(price, band.lowest, band.highest);
 
         for (uint256 i = 0; i < trade.buys.length; i++) {
             Fill calldata fill = trade.buys[i];
             uint256 cost = _ceilValue(fill.quantity, price);
-            _spend(fill.account, trade.token, cost);
+            _towardTarget(fill.account, trade.token, band.feed, fill.quantity, true);
+            _spend(fill.account, cost);
             collector.collect(cash, fill.account, cost);
             _push(trade.token, fill.account, fill.quantity);
             emit Filled(fill.account, trade.token, true, fill.quantity, cost);
@@ -361,36 +461,81 @@ contract Settlement {
         if (spent > allowance) revert MarketLegShort(allowance, spent);
     }
 
-    /// @dev The lowest and highest batch price the feed allows right now.
-    function _band(address token) private view returns (uint256 lowest, uint256 highest) {
-        (uint256 feedPrice, uint64 lastUpdated,,) = priceFeed.prices(token);
-        if (feedPrice == 0 || lastUpdated > block.timestamp || block.timestamp - lastUpdated > maxPriceAge) {
-            revert PriceUnavailable(token);
-        }
-        lowest = (feedPrice * (BPS - maxDeviationBps)) / BPS;
-        highest = (feedPrice * (BPS + maxDeviationBps)) / BPS;
-    }
+    // ---- the rules a fill must pass ----
 
-    /// @dev Check the account's rules for one fill and count it against today's limit.
-    function _spend(address who, address token, uint256 value) private {
+    /// @dev Refuse a fill that would take the holding past its target, or
+    ///      move it away from it. Values use the public feed, never the batch
+    ///      price. Called before the fill moves any of the fund's tokens, so
+    ///      `held` is the balance going in.
+    function _towardTarget(address who, address token, uint256 feed, uint256 quantity, bool buy) private {
         Account storage account = accounts[who];
         if (!account.open) revert AccountNotOpen(who);
-        if (!listed[who][token]) revert TokenNotListed(who, token);
-        uint64 today = uint64(block.timestamp / 1 days);
-        if (account.day != today) {
-            account.day = today;
-            account.usedToday = 0;
+        uint256 plusOne = _targetPlusOne[who][account.epoch][token];
+        if (plusOne == 0) revert TokenNotListed(who, token);
+
+        uint256 target = (_fundValue(who) * (plusOne - 1)) / WHOLE;
+        uint256 held = IERC20(token).balanceOf(who);
+        if (buy) {
+            uint256 valueAfter = _floorValue(held + quantity, feed);
+            if (valueAfter > target) revert PastTarget(who, token, valueAfter, target);
+        } else {
+            uint256 valueAfter = quantity > held ? 0 : _floorValue(held - quantity, feed);
+            if (valueAfter < target) revert PastTarget(who, token, valueAfter, target);
         }
-        uint256 wouldUse = account.usedToday + value;
-        if (wouldUse > account.dailyLimit) revert DailyLimitExceeded(who, wouldUse, account.dailyLimit);
-        account.usedToday = wouldUse;
     }
 
-    function _list(address token, bool isListed) private {
-        if (isListed) _requireEighteenDecimals(token);
-        listed[msg.sender][token] = isListed;
-        emit TokenListed(msg.sender, token, isListed);
+    /// @dev What a fund is worth at feed prices: its cash plus every listed
+    ///      token. Worked out once per fund per batch, before any of its
+    ///      fills, and remembered for the rest of that batch only, so a
+    ///      fund's targets do not shift while its own trades are settling.
+    function _fundValue(address who) private returns (uint256 value) {
+        bytes32 slot = keccak256(abi.encode(who, _batch));
+        assembly {
+            value := tload(slot)
+        }
+        if (value != 0) return value - 1;
+
+        value = IERC20(cash).balanceOf(who);
+        address[] storage tokens = _tokens[who];
+        for (uint256 i = 0; i < tokens.length; i++) {
+            uint256 held = IERC20(tokens[i]).balanceOf(who);
+            if (held != 0) value += _floorValue(held, _feedPrice(tokens[i]));
+        }
+        assembly {
+            tstore(slot, add(value, 1))
+        }
     }
+
+    /// @dev Count a fill against the fund's limit, which refills evenly over a day.
+    function _spend(address who, uint256 value) private {
+        if (value == 0) revert EmptyFill();
+        Account storage account = accounts[who];
+        uint256 left = _limitLeft(account);
+        if (value > left) revert DailyLimitExceeded(who, value, left);
+        account.limitLeft = left - value;
+        account.limitAt = uint64(block.timestamp);
+    }
+
+    function _limitLeft(Account storage account) private view returns (uint256 left) {
+        left = account.limitLeft + (account.dailyLimit * (block.timestamp - account.limitAt)) / 1 days;
+        if (left > account.dailyLimit) left = account.dailyLimit;
+    }
+
+    function _feedPrice(address token) private view returns (uint256 feed) {
+        uint64 lastUpdated;
+        (feed, lastUpdated,,) = priceFeed.prices(token);
+        if (feed == 0 || lastUpdated > block.timestamp || block.timestamp - lastUpdated > maxPriceAge) {
+            revert PriceUnavailable(token);
+        }
+    }
+
+    function _band(address token) private view returns (Band memory band) {
+        band.feed = _feedPrice(token);
+        band.lowest = (band.feed * (BPS - maxDeviationBps)) / BPS;
+        band.highest = (band.feed * (BPS + maxDeviationBps)) / BPS;
+    }
+
+    // ---- arithmetic and token calls ----
 
     function _floorValue(uint256 quantity, uint256 price) private pure returns (uint256) {
         return (quantity * price) / ONE;

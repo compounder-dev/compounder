@@ -78,6 +78,7 @@ contract SettlementTest is Test {
     uint256 constant LIMIT = 100_000e18;
     uint256 constant START_CASH = 50_000e18;
     uint256 constant START_STOCK = 100e18;
+    uint256 constant PERCENT = 10_000_000; // target shares are out of one billion
 
     MockToken cash;
     MockToken nvda;
@@ -89,9 +90,10 @@ contract SettlementTest is Test {
 
     address admin = makeAddr("admin");
     address operator = makeAddr("operator");
-    address alice = makeAddr("alice");
-    address bob = makeAddr("bob");
-    address carol = makeAddr("carol");
+    // Each starts with 50,000 cash, 100 NVDA (25,000) and 100 AMZN (20,000): a fund worth 95,000.
+    address alice = makeAddr("alice"); // wants more of both: targets 40% and 30%
+    address bob = makeAddr("bob"); // wants less of both: targets 10% and 10%
+    address carol = makeAddr("carol"); // wants more of both, like alice
 
     function setUp() public {
         vm.warp(1_800_000_000);
@@ -100,34 +102,53 @@ contract SettlementTest is Test {
         amzn = new MockToken(18);
         feed = new MockFeed();
         router = new MockRouter();
-        // Batch prices must sit within 1% of a feed price no older than 12 hours.
+        // Batch prices within 1% of a feed price no older than 12 hours.
         settlement = new Settlement(address(cash), address(feed), admin, operator, 100, 12 hours);
         collector = settlement.collector();
         vm.prank(admin);
-        settlement.setRouter(address(router), true);
+        settlement.proposeRouter(address(router));
+        vm.warp(block.timestamp + 2 days);
+        settlement.activateRouter(address(router));
         feed.set(address(nvda), 250e18);
         feed.set(address(amzn), 200e18);
-        _join(alice);
-        _join(bob);
-        _join(carol);
+        _join(alice, 40 * PERCENT, 30 * PERCENT);
+        _join(bob, 10 * PERCENT, 10 * PERCENT);
+        _join(carol, 40 * PERCENT, 30 * PERCENT);
     }
 
     // ---- helpers ----
 
-    /// Fund an account, approve the collector and opt in.
-    function _join(address who) private {
+    /// Fund an account, approve the collector and opt in with target shares.
+    function _join(address who, uint256 nvdaShare, uint256 amznShare) private {
         cash.mint(who, START_CASH);
         nvda.mint(who, START_STOCK);
         amzn.mint(who, START_STOCK);
-        address[] memory tokens = new address[](2);
-        tokens[0] = address(nvda);
-        tokens[1] = address(amzn);
         vm.startPrank(who);
         cash.approve(address(collector), type(uint256).max);
         nvda.approve(address(collector), type(uint256).max);
         amzn.approve(address(collector), type(uint256).max);
-        settlement.open(tokens, LIMIT);
         vm.stopPrank();
+        _open(who, nvdaShare, amznShare);
+    }
+
+    function _open(address who, uint256 nvdaShare, uint256 amznShare) private {
+        address[] memory tokens = new address[](2);
+        tokens[0] = address(nvda);
+        tokens[1] = address(amzn);
+        uint256[] memory targets = new uint256[](2);
+        targets[0] = nvdaShare;
+        targets[1] = amznShare;
+        vm.prank(who);
+        settlement.open(tokens, targets, LIMIT);
+    }
+
+    function _openOne(address who, MockToken token, uint256 share) private {
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(token);
+        uint256[] memory targets = new uint256[](1);
+        targets[0] = share;
+        vm.prank(who);
+        settlement.open(tokens, targets, LIMIT);
     }
 
     function _fills(address a, uint256 qa) private pure returns (Settlement.Fill[] memory fills) {
@@ -222,13 +243,14 @@ contract SettlementTest is Test {
 
     function test_severalTokensSettleInOneTransaction() public {
         Settlement.Trade[] memory trades = new Settlement.Trade[](2);
-        trades[0] = _netSell(nvda, 1e18, 250e18, _none(), _fills(alice, 1e18));
+        trades[0] = _netSell(nvda, 1e18, 250e18, _none(), _fills(bob, 1e18));
         trades[1] = _netBuy(amzn, 1e18, 200e18, _fills(alice, 1e18), _none());
         vm.prank(operator);
         settlement.settle(trades);
-        assertEq(nvda.balanceOf(alice), START_STOCK - 1e18);
+        assertEq(nvda.balanceOf(bob), START_STOCK - 1e18);
+        assertEq(cash.balanceOf(bob), START_CASH + 250e18);
         assertEq(amzn.balanceOf(alice), START_STOCK + 1e18);
-        assertEq(cash.balanceOf(alice), START_CASH + 250e18 - 200e18);
+        assertEq(cash.balanceOf(alice), START_CASH - 200e18);
         _assertHoldsNothing();
     }
 
@@ -269,6 +291,133 @@ contract SettlementTest is Test {
         _assertHoldsNothing();
     }
 
+    // ---- a fill may only move a fund toward its targets ----
+
+    function test_aSellCannotTakeAHoldingBelowItsTarget() public {
+        // Bob's NVDA target is 10% of 95,000: 9,500, or 38 tokens. Selling 62 lands exactly there.
+        _settle(_netSell(nvda, 62e18, 15_500e18, _none(), _fills(bob, 62e18)));
+        assertEq(nvda.balanceOf(bob), 38e18);
+    }
+
+    function test_aSellPastTheTargetIsRefused() public {
+        // Selling 63 would leave 9,250, below the 9,500 target.
+        Settlement.Trade memory trade = _netSell(nvda, 63e18, 15_750e18, _none(), _fills(bob, 63e18));
+        vm.expectRevert(abi.encodeWithSelector(Settlement.PastTarget.selector, bob, address(nvda), 9_250e18, 9_500e18));
+        _settle(trade);
+        _assertUntouched(bob);
+    }
+
+    function test_aBuyPastTheTargetIsRefused() public {
+        // Alice's NVDA target is 40% of 95,000: 38,000, or 152 tokens. She holds 100.
+        _settle(_netBuy(nvda, 52e18, 13_000e18, _fills(alice, 52e18), _none()));
+        Settlement.Trade memory more = _netBuy(nvda, 2e18, 500e18, _fills(alice, 2e18), _none());
+        vm.expectRevert(abi.encodeWithSelector(Settlement.PastTarget.selector, alice, address(nvda), 38_500e18, 38_000e18));
+        _settle(more);
+    }
+
+    function test_aHoldingAboveTargetCannotBeBought_norOneBelowSold() public {
+        Settlement.Trade memory buy = _netBuy(nvda, 2e18, 500e18, _fills(bob, 2e18), _none());
+        vm.expectRevert(abi.encodeWithSelector(Settlement.PastTarget.selector, bob, address(nvda), 25_500e18, 9_500e18));
+        _settle(buy);
+        Settlement.Trade memory sell = _netSell(nvda, 2e18, 500e18, _none(), _fills(alice, 2e18));
+        vm.expectRevert(abi.encodeWithSelector(Settlement.PastTarget.selector, alice, address(nvda), 24_500e18, 38_000e18));
+        _settle(sell);
+    }
+
+    function test_aFundCannotBeTradedBackAndForth() public {
+        // A hostile operator sells Bob's stock cheaply, then tries to sell it back to him dearer.
+        _settle(_netSell(nvda, 30e18, 7_440e18, _none(), _fills(bob, 30e18)));
+        Settlement.Trade memory back = _netBuy(nvda, 30e18, 7_560e18, _fills(bob, 30e18), _none());
+        // His fund is now worth 94,940, so his target is 9,494. He holds 17,500 and cannot buy.
+        vm.expectRevert(abi.encodeWithSelector(Settlement.PastTarget.selector, bob, address(nvda), 25_000e18, 9_494e18));
+        _settle(back);
+    }
+
+    function test_aFundOnTargetCannotBeTraded() public {
+        address erin = makeAddr("erin");
+        cash.mint(erin, 75_000e18);
+        nvda.mint(erin, 100e18);
+        vm.startPrank(erin);
+        cash.approve(address(collector), type(uint256).max);
+        nvda.approve(address(collector), type(uint256).max);
+        vm.stopPrank();
+        _openOne(erin, nvda, 25 * PERCENT); // 25,000 of 100,000: exactly on target
+
+        Settlement.Trade memory sell = _netSell(nvda, 0.01e18, 2.5e18, _none(), _fills(erin, 0.01e18));
+        vm.expectRevert(abi.encodeWithSelector(Settlement.PastTarget.selector, erin, address(nvda), 24_997.5e18, 25_000e18));
+        _settle(sell);
+        Settlement.Trade memory buy = _netBuy(nvda, 0.01e18, 2.5e18, _fills(erin, 0.01e18), _none());
+        vm.expectRevert(abi.encodeWithSelector(Settlement.PastTarget.selector, erin, address(nvda), 25_002.5e18, 25_000e18));
+        _settle(buy);
+    }
+
+    function test_aBuyerIsValuedBeforeItsCashIsCollected() public {
+        // Alice may buy up to 52 tokens: 40% of a fund worth 95,000. Valuing her
+        // after her 13,000 had been collected would wrongly shrink that target.
+        _settle(_netBuy(nvda, 52e18, 13_000e18, _fills(alice, 52e18), _none()));
+        assertEq(nvda.balanceOf(alice), 152e18);
+    }
+
+    function test_theSameFundListedTwiceCannotSlipPastItsTarget() public {
+        Settlement.Fill[] memory buys = new Settlement.Fill[](2);
+        buys[0] = Settlement.Fill(alice, 30e18);
+        buys[1] = Settlement.Fill(alice, 30e18); // 60 in all, against room for 52
+        Settlement.Trade memory trade = _netBuy(nvda, 60e18, 15_000e18, buys, _none());
+        vm.expectRevert(abi.encodeWithSelector(Settlement.PastTarget.selector, alice, address(nvda), 40_000e18, 38_000e18));
+        _settle(trade);
+        _assertUntouched(alice);
+    }
+
+    function test_aBetterFillThanAskedCannotPushABuyerPastItsTarget() public {
+        // Alice asks for exactly the 52 tokens she has room for; the market delivers 53.
+        bytes memory call = abi.encodeCall(MockRouter.swap, (cash, nvda, 13_000e18, 53e18, address(settlement)));
+        Settlement.Trade memory trade =
+            Settlement.Trade(address(nvda), true, 52e18, 13_000e18, address(router), call, _fills(alice, 52e18), _none());
+        vm.expectRevert(abi.encodeWithSelector(Settlement.PastTarget.selector, alice, address(nvda), 38_250e18, 38_000e18));
+        _settle(trade);
+    }
+
+    function test_openingAgainReplacesTheWholeSetup() public {
+        _openOne(bob, amzn, 10 * PERCENT);
+        Settlement.Trade memory trade = _netSell(nvda, 1e18, 250e18, _none(), _fills(bob, 1e18));
+        vm.expectRevert(abi.encodeWithSelector(Settlement.TokenNotListed.selector, bob, address(nvda)));
+        _settle(trade);
+        (bool isListed,) = settlement.targetOf(bob, address(nvda));
+        assertFalse(isListed);
+        assertEq(settlement.tokensOf(bob).length, 1);
+    }
+
+    function test_badSetupsAreRefused() public {
+        address[] memory tokens = new address[](2);
+        tokens[0] = address(nvda);
+        tokens[1] = address(nvda);
+        uint256[] memory targets = new uint256[](2);
+        targets[0] = 10 * PERCENT;
+        targets[1] = 10 * PERCENT;
+        vm.startPrank(alice);
+        vm.expectRevert(Settlement.BadTargets.selector); // a token listed twice
+        settlement.open(tokens, targets, LIMIT);
+        tokens[1] = address(amzn);
+        targets[0] = 60 * PERCENT;
+        targets[1] = 50 * PERCENT;
+        vm.expectRevert(Settlement.BadTargets.selector); // shares above 100%
+        settlement.open(tokens, targets, LIMIT);
+        tokens[1] = address(cash);
+        targets[1] = 10 * PERCENT;
+        vm.expectRevert(Settlement.BadTargets.selector); // cash is what is left over, never listed
+        settlement.open(tokens, targets, LIMIT);
+        vm.stopPrank();
+    }
+
+    function test_aTokenWithOtherDecimalsCannotBeListed() public {
+        MockToken six = new MockToken(6);
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(six);
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(Settlement.WrongDecimals.selector, address(six)));
+        settlement.open(tokens, new uint256[](1), LIMIT);
+    }
+
     // ---- the price is checked, not trusted ----
 
     function test_aBuyLimitAboveTheBandIsRefusedBeforeAnyTrade() public {
@@ -286,7 +435,7 @@ contract SettlementTest is Test {
         _assertUntouched(bob);
     }
 
-    function test_aMatchedBuyerIsProtectedFromACheapMarketLeg() public {
+    function test_aMatchedSellerIsProtectedFromACheapMarketLeg() public {
         // A buy filled far below the band would short-change the matched seller.
         Settlement.Trade memory trade = _netBuy(nvda, 2e18, 400e18, _fills(alice, 3e18), _fills(bob, 1e18));
         vm.expectRevert(abi.encodeWithSelector(Settlement.PriceOutOfBand.selector, 200e18, 247.5e18, 252.5e18));
@@ -298,6 +447,14 @@ contract SettlementTest is Test {
         vm.warp(block.timestamp + 12 hours + 1);
         Settlement.Trade memory trade = _netBuy(nvda, 2e18, 500e18, _fills(alice, 2e18), _none());
         vm.expectRevert(abi.encodeWithSelector(Settlement.PriceUnavailable.selector, address(nvda)));
+        _settle(trade);
+    }
+
+    function test_aFundCannotBeTradedWhileAnyOfItsPricesIsStale() public {
+        vm.warp(block.timestamp + 12 hours + 1);
+        feed.set(address(nvda), 250e18); // AMZN's price is now too old to value Alice's fund
+        Settlement.Trade memory trade = _netBuy(nvda, 2e18, 500e18, _fills(alice, 2e18), _none());
+        vm.expectRevert(abi.encodeWithSelector(Settlement.PriceUnavailable.selector, address(amzn)));
         _settle(trade);
     }
 
@@ -326,7 +483,7 @@ contract SettlementTest is Test {
         _assertUntouched(alice);
     }
 
-    function test_aRouteCannotSpendAnAccountsApproval() public {
+    function test_aRouteCannotSpendAFundsApproval() public {
         // Bob approved the collector, not the settlement contract or any route.
         bytes memory call = abi.encodeCall(MockRouter.raid, (cash, bob, makeAddr("thief"), 1_000e18));
         Settlement.Trade memory trade = Settlement.Trade(address(nvda), true, 2e18, 500e18, address(router), call, _fills(alice, 2e18), _none());
@@ -360,17 +517,19 @@ contract SettlementTest is Test {
     function test_theCollectorAndTheCashTokenCanNeverBeRoutes() public {
         vm.startPrank(admin);
         vm.expectRevert(abi.encodeWithSelector(Settlement.RouterNotAllowed.selector, address(collector)));
-        settlement.setRouter(address(collector), true);
+        settlement.proposeRouter(address(collector));
         vm.expectRevert(abi.encodeWithSelector(Settlement.RouterNotAllowed.selector, address(cash)));
-        settlement.setRouter(address(cash), true);
+        settlement.proposeRouter(address(cash));
         vm.expectRevert(abi.encodeWithSelector(Settlement.RouterNotAllowed.selector, address(settlement)));
-        settlement.setRouter(address(settlement), true);
+        settlement.proposeRouter(address(settlement));
         vm.stopPrank();
     }
 
     function test_theTokenBeingTradedCannotBeItsOwnRoute() public {
         vm.prank(admin);
-        settlement.setRouter(address(nvda), true);
+        settlement.proposeRouter(address(nvda));
+        vm.warp(block.timestamp + 2 days);
+        settlement.activateRouter(address(nvda));
         bytes memory call = abi.encodeCall(MockToken.transfer, (makeAddr("thief"), 1e18));
         Settlement.Trade memory trade = Settlement.Trade(address(nvda), false, 1e18, 250e18, address(nvda), call, _none(), _fills(bob, 1e18));
         vm.expectRevert(abi.encodeWithSelector(Settlement.RouterNotAllowed.selector, address(nvda)));
@@ -398,7 +557,7 @@ contract SettlementTest is Test {
         assertEq(nvda.balanceOf(dave), 10e18);
     }
 
-    function test_aTokenTheAccountDidNotListCannotBeTraded() public {
+    function test_aTokenTheFundDidNotListCannotBeTraded() public {
         MockToken other = new MockToken(18);
         feed.set(address(other), 50e18);
         other.mint(alice, 10e18);
@@ -409,19 +568,38 @@ contract SettlementTest is Test {
         _settle(trade);
     }
 
-    function test_theDailyLimitCapsTradedValue_andResetsTheNextDay() public {
+    function test_theDailyLimitCapsTradedValue_andRefillsEvenly() public {
         vm.prank(alice);
         settlement.setDailyLimit(600e18);
         _settle(_netBuy(nvda, 2e18, 500e18, _fills(alice, 2e18), _none()));
 
         Settlement.Trade memory second = _netBuy(nvda, 1e18, 250e18, _fills(alice, 1e18), _none());
-        vm.expectRevert(abi.encodeWithSelector(Settlement.DailyLimitExceeded.selector, alice, 750e18, 600e18));
+        vm.expectRevert(abi.encodeWithSelector(Settlement.DailyLimitExceeded.selector, alice, 250e18, 100e18));
         _settle(second);
 
-        vm.warp(block.timestamp + 1 days);
+        // Half a day later half the limit has come back: 100 left plus 300.
+        vm.warp(block.timestamp + 12 hours);
         feed.set(address(nvda), 250e18);
+        feed.set(address(amzn), 200e18);
+        Settlement.Trade memory tooMuch = _netBuy(nvda, 2e18, 500e18, _fills(alice, 2e18), _none());
+        vm.expectRevert(abi.encodeWithSelector(Settlement.DailyLimitExceeded.selector, alice, 500e18, 400e18));
+        _settle(tooMuch);
         _settle(_netBuy(nvda, 1e18, 250e18, _fills(alice, 1e18), _none()));
         assertEq(nvda.balanceOf(alice), START_STOCK + 3e18);
+    }
+
+    function test_theLimitDoesNotDoubleAcrossMidnight() public {
+        vm.prank(alice);
+        settlement.setDailyLimit(600e18);
+        // One second before midnight UTC, then one second after.
+        vm.warp((block.timestamp / 1 days + 1) * 1 days - 1);
+        feed.set(address(nvda), 250e18);
+        feed.set(address(amzn), 200e18);
+        _settle(_netBuy(nvda, 2e18, 500e18, _fills(alice, 2e18), _none()));
+        vm.warp(block.timestamp + 2);
+        Settlement.Trade memory again = _netBuy(nvda, 2e18, 500e18, _fills(alice, 2e18), _none());
+        vm.expectRevert();
+        _settle(again);
     }
 
     function test_theStatedDifferenceMustMatchTheFills() public {
@@ -438,8 +616,8 @@ contract SettlementTest is Test {
 
     function test_oneFailingTradeUndoesTheWholeBatch() public {
         Settlement.Trade[] memory trades = new Settlement.Trade[](2);
-        trades[0] = _netSell(nvda, 1e18, 250e18, _none(), _fills(alice, 1e18));
-        trades[1] = _netBuy(amzn, 1e18, 150e18, _fills(bob, 1e18), _none()); // far below the band
+        trades[0] = _netSell(nvda, 1e18, 250e18, _none(), _fills(bob, 1e18));
+        trades[1] = _netBuy(amzn, 1e18, 150e18, _fills(alice, 1e18), _none()); // far below the band
         vm.prank(operator);
         vm.expectRevert();
         settlement.settle(trades);
@@ -457,71 +635,85 @@ contract SettlementTest is Test {
         _settle(trade);
     }
 
-    // ---- what the account controls ----
+    // ---- what the fund controls ----
 
     function test_closingStopsAllTradingAtOnce() public {
-        vm.prank(alice);
+        vm.prank(bob);
         settlement.close();
-        Settlement.Trade memory trade = _netSell(nvda, 1e18, 250e18, _none(), _fills(alice, 1e18));
-        vm.expectRevert(abi.encodeWithSelector(Settlement.AccountNotOpen.selector, alice));
+        Settlement.Trade memory trade = _netSell(nvda, 1e18, 250e18, _none(), _fills(bob, 1e18));
+        vm.expectRevert(abi.encodeWithSelector(Settlement.AccountNotOpen.selector, bob));
         _settle(trade);
-        _assertUntouched(alice);
+        _assertUntouched(bob);
     }
 
     function test_revokingAnApprovalStopsThatTokenAtOnce() public {
-        vm.prank(alice);
+        vm.prank(bob);
         nvda.approve(address(collector), 0);
-        Settlement.Trade memory trade = _netSell(nvda, 1e18, 250e18, _none(), _fills(alice, 1e18));
+        Settlement.Trade memory trade = _netSell(nvda, 1e18, 250e18, _none(), _fills(bob, 1e18));
         vm.expectRevert(abi.encodeWithSelector(Collector.TokenCallFailed.selector, address(nvda)));
         _settle(trade);
     }
 
-    function test_unlistingATokenStopsIt() public {
-        vm.prank(alice);
-        settlement.setListed(address(nvda), false);
-        Settlement.Trade memory trade = _netSell(nvda, 1e18, 250e18, _none(), _fills(alice, 1e18));
-        vm.expectRevert(abi.encodeWithSelector(Settlement.TokenNotListed.selector, alice, address(nvda)));
-        _settle(trade);
-    }
-
-    function test_aTokenWithOtherDecimalsCannotBeListed() public {
-        MockToken six = new MockToken(6);
-        vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSelector(Settlement.WrongDecimals.selector, address(six)));
-        settlement.setListed(address(six), true);
-    }
-
     // ---- administration ----
 
-    function test_onlyTheAdminReplacesTheOperator_andTheOldOneLosesAccess() public {
+    function test_aNewOperatorWaitsTwoDays_andRemovalIsInstant() public {
         address replacement = makeAddr("replacement");
         vm.prank(operator);
         vm.expectRevert(Settlement.NotAdmin.selector);
-        settlement.setOperator(replacement);
+        settlement.proposeOperator(replacement);
 
         vm.prank(admin);
-        settlement.setOperator(replacement);
+        settlement.proposeOperator(replacement);
+        vm.expectRevert(Settlement.NotReady.selector);
+        settlement.activateOperator();
+        assertEq(settlement.operator(), operator, "the new operator acted before the delay");
 
+        vm.warp(block.timestamp + 2 days);
+        settlement.activateOperator();
+        assertEq(settlement.operator(), replacement);
+
+        vm.prank(admin);
+        settlement.removeOperator();
         Settlement.Trade[] memory trades = new Settlement.Trade[](1);
         trades[0] = _netBuy(nvda, 1e18, 250e18, _fills(alice, 1e18), _none());
-        vm.prank(operator);
+        vm.prank(replacement);
         vm.expectRevert(Settlement.NotOperator.selector);
         settlement.settle(trades);
-        vm.prank(replacement);
-        settlement.settle(trades);
-        assertEq(nvda.balanceOf(alice), START_STOCK + 1e18);
     }
 
-    function test_theAdminCannotSettle_andOnlyTheAdminApprovesRoutes() public {
+    function test_theAdminCannotSettle_orMakeItselfOperatorAtOnce() public {
         Settlement.Trade[] memory trades = new Settlement.Trade[](1);
         trades[0] = _netBuy(nvda, 1e18, 250e18, _fills(alice, 1e18), _none());
-        vm.prank(admin);
+        vm.startPrank(admin);
         vm.expectRevert(Settlement.NotOperator.selector);
         settlement.settle(trades);
+        settlement.proposeOperator(admin);
+        vm.expectRevert(Settlement.NotReady.selector);
+        settlement.activateOperator();
+        vm.expectRevert(Settlement.NotOperator.selector);
+        settlement.settle(trades);
+        vm.stopPrank();
+    }
 
+    function test_aNewRouteWaitsTwoDays_andRemovalIsInstant() public {
+        MockRouter other = new MockRouter();
         vm.prank(operator);
         vm.expectRevert(Settlement.NotAdmin.selector);
-        settlement.setRouter(makeAddr("route"), true);
+        settlement.proposeRouter(address(other));
+
+        vm.prank(admin);
+        settlement.proposeRouter(address(other));
+        vm.expectRevert(Settlement.NotReady.selector);
+        settlement.activateRouter(address(other));
+        vm.warp(block.timestamp + 2 days);
+        settlement.activateRouter(address(other));
+        assertTrue(settlement.isRouter(address(other)));
+
+        vm.prank(admin);
+        settlement.removeRouter(address(other));
+        assertFalse(settlement.isRouter(address(other)));
+        vm.expectRevert(Settlement.NotReady.selector);
+        settlement.activateRouter(address(other));
     }
 
     // ---- any batch ----
@@ -535,8 +727,9 @@ contract SettlementTest is Test {
         uint256 sold;
     }
 
-    /// Three accounts, each a buyer or a seller of a random quantity.
-    function _mix(uint256 seed, uint256 feedPrice) private view returns (Mix memory mix) {
+    /// Three funds, each a buyer or a seller of a random quantity. A buyer's
+    /// target is all NVDA and a seller's is none, so every fill is toward target.
+    function _mix(uint256 seed, uint256 feedPrice) private returns (Mix memory mix) {
         address[3] memory who = [alice, bob, carol];
         Settlement.Fill[] memory buys = new Settlement.Fill[](3);
         Settlement.Fill[] memory sells = new Settlement.Fill[](3);
@@ -544,14 +737,16 @@ contract SettlementTest is Test {
         uint256 nSells;
         for (uint256 i = 0; i < 3; i++) {
             uint256 roll = uint256(keccak256(abi.encode(seed, i)));
-            // Keep each fill's value inside what an account holds and may trade.
+            // Keep each fill's value inside what a fund holds and may trade.
             uint256 quantity = bound(roll >> 8, 1e6, 10_000e36 / feedPrice);
             if (quantity > 90e18) quantity = 90e18;
             if (roll % 2 == 0) {
+                _openOne(who[i], nvda, 100 * PERCENT);
                 mix.buyQty[i] = quantity;
                 buys[nBuys++] = Settlement.Fill(who[i], quantity);
                 mix.bought += quantity;
             } else {
+                _openOne(who[i], nvda, 0);
                 mix.sellQty[i] = quantity;
                 sells[nSells++] = Settlement.Fill(who[i], quantity);
                 mix.sold += quantity;
@@ -581,7 +776,7 @@ contract SettlementTest is Test {
     }
 
     /// Whatever the mix of buyers and sellers and wherever the market fills
-    /// inside the band, every account trades at the one batch price and the
+    /// inside the band, every fund trades at the one batch price and the
     /// contract ends holding nothing but dust.
     function testFuzz_everyFillSettlesAtTheOneBatchPrice(uint256 seed, uint256 feedPrice, uint256 skewBps) public {
         feedPrice = bound(feedPrice, 1e15, 100_000e18);
