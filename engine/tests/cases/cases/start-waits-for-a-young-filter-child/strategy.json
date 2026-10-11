@@ -1,0 +1,31 @@
+{
+ "rebalance": {
+  "frequency": "daily",
+  "type": "calendar"
+ },
+ "root": {
+  "block": "filter",
+  "children": [
+   {
+    "asset": {
+     "market": "equities",
+     "symbol": "AAA"
+    },
+    "block": "asset"
+   },
+   {
+    "asset": {
+     "market": "equities",
+     "symbol": "YOUNG"
+    },
+    "block": "asset"
+   }
+  ],
+  "count": 1,
+  "sort_by": {
+   "indicator": "cumulative_return",
+   "window": 5
+  },
+  "take": "top"
+ }
+}

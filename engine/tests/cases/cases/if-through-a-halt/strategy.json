@@ -1,0 +1,154 @@
+{
+ "rebalance": {
+  "frequency": "daily",
+  "type": "calendar"
+ },
+ "root": {
+  "block": "weight",
+  "children": [
+   {
+    "block": "if",
+    "condition": {
+     "compare": "above",
+     "left": {
+      "asset": {
+       "market": "equities",
+       "symbol": "HALT"
+      },
+      "indicator": "cumulative_return",
+      "window": 5
+     },
+     "right": {
+      "fixed": 0
+     }
+    },
+    "else": [
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "BBB"
+      },
+      "block": "asset"
+     }
+    ],
+    "then": [
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "HALT"
+      },
+      "block": "asset"
+     }
+    ]
+   },
+   {
+    "block": "if",
+    "condition": {
+     "compare": "equal",
+     "left": {
+      "asset": {
+       "market": "equities",
+       "symbol": "HALT"
+      },
+      "indicator": "return_deviation",
+      "window": 6
+     },
+     "right": {
+      "fixed": 0
+     }
+    },
+    "else": [
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "CCC"
+      },
+      "block": "asset"
+     }
+    ],
+    "then": [
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "AAA"
+      },
+      "block": "asset"
+     }
+    ]
+   },
+   {
+    "block": "if",
+    "condition": {
+     "compare": "above",
+     "left": {
+      "asset": {
+       "market": "equities",
+       "symbol": "HALT"
+      },
+      "indicator": "average_price",
+      "window": 10
+     },
+     "right": {
+      "fixed": 34
+     }
+    },
+    "else": [
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "EEE"
+      },
+      "block": "asset"
+     }
+    ],
+    "then": [
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "DDD"
+      },
+      "block": "asset"
+     }
+    ]
+   },
+   {
+    "block": "if",
+    "condition": {
+     "compare": "above",
+     "left": {
+      "asset": {
+       "market": "equities",
+       "symbol": "HALT"
+      },
+      "indicator": "relative_strength",
+      "window": 8
+     },
+     "right": {
+      "fixed": 0.5
+     }
+    },
+    "else": [
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "BBB"
+      },
+      "block": "asset"
+     }
+    ],
+    "then": [
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "AAA"
+      },
+      "block": "asset"
+     }
+    ]
+   }
+  ],
+  "weighting": {
+   "type": "equal"
+  }
+ }
+}

@@ -1,0 +1,86 @@
+{
+ "rebalance": {
+  "frequency": "daily",
+  "type": "calendar"
+ },
+ "root": {
+  "block": "filter",
+  "children": [
+   {
+    "block": "filter",
+    "children": [
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "AAA"
+      },
+      "block": "asset"
+     },
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "CCC"
+      },
+      "block": "asset"
+     },
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "DDD"
+      },
+      "block": "asset"
+     }
+    ],
+    "count": 1,
+    "sort_by": {
+     "indicator": "cumulative_return",
+     "window": 6
+    },
+    "take": "top"
+   },
+   {
+    "asset": {
+     "market": "equities",
+     "symbol": "BBB"
+    },
+    "block": "asset"
+   },
+   {
+    "block": "weight",
+    "children": [
+     {
+      "block": "weight",
+      "children": [
+       {
+        "asset": {
+         "market": "equities",
+         "symbol": "EEE"
+        },
+        "block": "asset"
+       },
+       {
+        "asset": {
+         "market": "equities",
+         "symbol": "CCC"
+        },
+        "block": "asset"
+       }
+      ],
+      "weighting": {
+       "type": "equal"
+      }
+     }
+    ],
+    "weighting": {
+     "type": "equal"
+    }
+   }
+  ],
+  "count": 1,
+  "sort_by": {
+   "indicator": "cumulative_return",
+   "window": 9
+  },
+  "take": "bottom"
+ }
+}

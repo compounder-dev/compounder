@@ -1,0 +1,41 @@
+{
+ "rebalance": {
+  "frequency": "monthly",
+  "type": "calendar"
+ },
+ "root": {
+  "block": "if",
+  "condition": {
+   "compare": "above",
+   "left": {
+    "asset": {
+     "market": "equities",
+     "symbol": "YOUNG"
+    },
+    "indicator": "cumulative_return",
+    "window": 10
+   },
+   "right": {
+    "fixed": 0
+   }
+  },
+  "else": [
+   {
+    "asset": {
+     "market": "equities",
+     "symbol": "AAA"
+    },
+    "block": "asset"
+   }
+  ],
+  "then": [
+   {
+    "asset": {
+     "market": "equities",
+     "symbol": "YOUNG"
+    },
+    "block": "asset"
+   }
+  ]
+ }
+}

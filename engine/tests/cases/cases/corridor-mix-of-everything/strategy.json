@@ -1,0 +1,167 @@
+{
+ "rebalance": {
+  "corridor": 0.05,
+  "type": "threshold"
+ },
+ "root": {
+  "block": "weight",
+  "children": [
+   {
+    "block": "filter",
+    "children": [
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "AAA"
+      },
+      "block": "asset"
+     },
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "BBB"
+      },
+      "block": "asset"
+     },
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "CCC"
+      },
+      "block": "asset"
+     },
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "DDD"
+      },
+      "block": "asset"
+     },
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "EEE"
+      },
+      "block": "asset"
+     }
+    ],
+    "count": 2,
+    "sort_by": {
+     "indicator": "cumulative_return",
+     "window": 20
+    },
+    "take": "top"
+   },
+   {
+    "block": "weight",
+    "children": [
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "CCC"
+      },
+      "block": "asset"
+     },
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "BBB"
+      },
+      "block": "asset"
+     },
+     {
+      "block": "weight",
+      "children": [
+       {
+        "block": "weight",
+        "children": [
+         {
+          "asset": {
+           "market": "equities",
+           "symbol": "AAA"
+          },
+          "block": "asset"
+         },
+         {
+          "asset": {
+           "market": "equities",
+           "symbol": "DDD"
+          },
+          "block": "asset"
+         }
+        ],
+        "weighting": {
+         "type": "equal"
+        }
+       }
+      ],
+      "weighting": {
+       "type": "equal"
+      }
+     }
+    ],
+    "weighting": {
+     "type": "inverse_volatility",
+     "window": 10
+    }
+   },
+   {
+    "block": "if",
+    "condition": {
+     "compare": "above",
+     "left": {
+      "asset": {
+       "market": "equities",
+       "symbol": "AAA"
+      },
+      "indicator": "cumulative_return",
+      "window": 10
+     },
+     "right": {
+      "fixed": 0.01
+     }
+    },
+    "else": [
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "BBB"
+      },
+      "block": "asset"
+     }
+    ],
+    "then": [
+     {
+      "block": "weight",
+      "children": [
+       {
+        "asset": {
+         "market": "equities",
+         "symbol": "CCC"
+        },
+        "block": "asset"
+       },
+       {
+        "asset": {
+         "market": "equities",
+         "symbol": "EEE"
+        },
+        "block": "asset"
+       }
+      ],
+      "weighting": {
+       "shares": [
+        0.7,
+        0.3
+       ],
+       "type": "specified"
+      }
+     }
+    ]
+   }
+  ],
+  "weighting": {
+   "type": "equal"
+  }
+ }
+}

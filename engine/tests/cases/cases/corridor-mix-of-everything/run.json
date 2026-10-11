@@ -1,0 +1,12 @@
+{
+ "capital": 1000000000,
+ "conventions": {
+  "run_in": false
+ },
+ "costs": {
+  "min_order": 1.0,
+  "slippage": 0.0
+ },
+ "end": "2024-08-21",
+ "start": "2023-03-28"
+}

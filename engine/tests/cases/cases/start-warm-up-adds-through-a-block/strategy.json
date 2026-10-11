@@ -1,0 +1,75 @@
+{
+ "rebalance": {
+  "frequency": "daily",
+  "type": "calendar"
+ },
+ "root": {
+  "block": "filter",
+  "children": [
+   {
+    "block": "weight",
+    "children": [
+     {
+      "block": "weight",
+      "children": [
+       {
+        "block": "if",
+        "condition": {
+         "compare": "above",
+         "left": {
+          "asset": {
+           "market": "equities",
+           "symbol": "YOUNG"
+          },
+          "indicator": "relative_strength",
+          "window": 14
+         },
+         "right": {
+          "fixed": 0.5
+         }
+        },
+        "else": [
+         {
+          "asset": {
+           "market": "equities",
+           "symbol": "BBB"
+          },
+          "block": "asset"
+         }
+        ],
+        "then": [
+         {
+          "asset": {
+           "market": "equities",
+           "symbol": "YOUNG"
+          },
+          "block": "asset"
+         }
+        ]
+       }
+      ],
+      "weighting": {
+       "type": "equal"
+      }
+     }
+    ],
+    "weighting": {
+     "type": "equal"
+    }
+   },
+   {
+    "asset": {
+     "market": "equities",
+     "symbol": "AAA"
+    },
+    "block": "asset"
+   }
+  ],
+  "count": 1,
+  "sort_by": {
+   "indicator": "cumulative_return",
+   "window": 20
+  },
+  "take": "top"
+ }
+}

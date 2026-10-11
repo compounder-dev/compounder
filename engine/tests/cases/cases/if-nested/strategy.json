@@ -1,0 +1,115 @@
+{
+ "rebalance": {
+  "frequency": "daily",
+  "type": "calendar"
+ },
+ "root": {
+  "block": "if",
+  "condition": {
+   "compare": "above",
+   "left": {
+    "asset": {
+     "market": "equities",
+     "symbol": "AAA"
+    },
+    "indicator": "cumulative_return",
+    "window": 5
+   },
+   "right": {
+    "fixed": 0
+   }
+  },
+  "else": [
+   {
+    "block": "if",
+    "condition": {
+     "compare": "below",
+     "left": {
+      "asset": {
+       "market": "equities",
+       "symbol": "CCC"
+      },
+      "indicator": "max_drawdown",
+      "window": 15
+     },
+     "right": {
+      "fixed": 0.08
+     }
+    },
+    "else": [
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "BBB"
+      },
+      "block": "asset"
+     }
+    ],
+    "then": [
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "DDD"
+      },
+      "block": "asset"
+     }
+    ]
+   },
+   {
+    "asset": {
+     "market": "equities",
+     "symbol": "EEE"
+    },
+    "block": "asset"
+   }
+  ],
+  "then": [
+   {
+    "block": "if",
+    "condition": {
+     "compare": "above",
+     "left": {
+      "asset": {
+       "market": "equities",
+       "symbol": "BBB"
+      },
+      "indicator": "price"
+     },
+     "right": {
+      "asset": {
+       "market": "equities",
+       "symbol": "BBB"
+      },
+      "indicator": "average_price",
+      "window": 20
+     }
+    },
+    "else": [
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "BBB"
+      },
+      "block": "asset"
+     },
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "EEE"
+      },
+      "block": "asset"
+     }
+    ],
+    "then": [
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "CCC"
+      },
+      "block": "asset"
+     }
+    ]
+   }
+  ]
+ }
+}

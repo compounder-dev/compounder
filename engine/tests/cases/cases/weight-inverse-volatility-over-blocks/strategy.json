@@ -1,0 +1,87 @@
+{
+ "rebalance": {
+  "frequency": "daily",
+  "type": "calendar"
+ },
+ "root": {
+  "block": "weight",
+  "children": [
+   {
+    "block": "weight",
+    "children": [
+     {
+      "block": "weight",
+      "children": [
+       {
+        "asset": {
+         "market": "equities",
+         "symbol": "AAA"
+        },
+        "block": "asset"
+       },
+       {
+        "asset": {
+         "market": "equities",
+         "symbol": "BBB"
+        },
+        "block": "asset"
+       }
+      ],
+      "weighting": {
+       "type": "equal"
+      }
+     }
+    ],
+    "weighting": {
+     "type": "equal"
+    }
+   },
+   {
+    "block": "if",
+    "condition": {
+     "compare": "above",
+     "left": {
+      "asset": {
+       "market": "equities",
+       "symbol": "AAA"
+      },
+      "indicator": "cumulative_return",
+      "window": 5
+     },
+     "right": {
+      "fixed": 0
+     }
+    },
+    "else": [
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "DDD"
+      },
+      "block": "asset"
+     }
+    ],
+    "then": [
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "CCC"
+      },
+      "block": "asset"
+     }
+    ]
+   },
+   {
+    "asset": {
+     "market": "equities",
+     "symbol": "EEE"
+    },
+    "block": "asset"
+   }
+  ],
+  "weighting": {
+   "type": "inverse_volatility",
+   "window": 10
+  }
+ }
+}

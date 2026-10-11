@@ -1,0 +1,32 @@
+{
+ "rebalance": {
+  "corridor": 0.05,
+  "type": "threshold"
+ },
+ "root": {
+  "block": "weight",
+  "children": [
+   {
+    "asset": {
+     "market": "equities",
+     "symbol": "CCC"
+    },
+    "block": "asset"
+   },
+   {
+    "asset": {
+     "market": "equities",
+     "symbol": "BBB"
+    },
+    "block": "asset"
+   }
+  ],
+  "weighting": {
+   "shares": [
+    0.2,
+    0.8
+   ],
+   "type": "specified"
+  }
+ }
+}

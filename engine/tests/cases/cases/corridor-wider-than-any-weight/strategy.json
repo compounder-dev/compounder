@@ -1,0 +1,42 @@
+{
+ "rebalance": {
+  "corridor": 0.3,
+  "type": "threshold"
+ },
+ "root": {
+  "block": "weight",
+  "children": [
+   {
+    "asset": {
+     "market": "equities",
+     "symbol": "AAA"
+    },
+    "block": "asset"
+   },
+   {
+    "asset": {
+     "market": "equities",
+     "symbol": "BBB"
+    },
+    "block": "asset"
+   },
+   {
+    "asset": {
+     "market": "equities",
+     "symbol": "CCC"
+    },
+    "block": "asset"
+   },
+   {
+    "asset": {
+     "market": "equities",
+     "symbol": "DDD"
+    },
+    "block": "asset"
+   }
+  ],
+  "weighting": {
+   "type": "equal"
+  }
+ }
+}
