@@ -1,0 +1,33 @@
+{
+ "id": "EXSPECIFIEDWITHZERO0",
+ "step": "root",
+ "name": "specified with zero",
+ "description": "",
+ "rebalance": "monthly",
+ "children": [
+  {
+   "id": "694485a6-6dbe-54a8-b3b2-e473c96ffde7",
+   "step": "wt-cash-specified",
+   "children": [
+    {
+     "id": "3248c3a7-f114-5a62-9013-5e4fa6593bce",
+     "step": "asset",
+     "ticker": "SPY",
+     "weight": {
+      "num": "100",
+      "den": 100
+     }
+    },
+    {
+     "id": "42aae17c-3683-50bb-bd12-6995352bb8e5",
+     "step": "asset",
+     "ticker": "BIL",
+     "weight": {
+      "num": "0",
+      "den": 100
+     }
+    }
+   ]
+  }
+ ]
+}

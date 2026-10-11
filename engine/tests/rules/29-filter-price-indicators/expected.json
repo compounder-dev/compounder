@@ -1,0 +1,89 @@
+{
+ "rebalance": {
+  "frequency": "daily",
+  "type": "calendar"
+ },
+ "root": {
+  "block": "weight",
+  "children": [
+   {
+    "block": "filter",
+    "children": [
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "SPY"
+      },
+      "block": "asset"
+     },
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "QQQ"
+      },
+      "block": "asset"
+     }
+    ],
+    "count": 1,
+    "sort_by": {
+     "indicator": "average_price",
+     "window": 50
+    },
+    "take": "top"
+   },
+   {
+    "block": "filter",
+    "children": [
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "GLD"
+      },
+      "block": "asset"
+     },
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "SLV"
+      },
+      "block": "asset"
+     }
+    ],
+    "count": 1,
+    "sort_by": {
+     "indicator": "exponential_average_price",
+     "window": 9
+    },
+    "take": "bottom"
+   },
+   {
+    "block": "filter",
+    "children": [
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "XLU"
+      },
+      "block": "asset"
+     },
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "XLP"
+      },
+      "block": "asset"
+     }
+    ],
+    "count": 1,
+    "sort_by": {
+     "indicator": "price_deviation",
+     "window": 20
+    },
+    "take": "bottom"
+   }
+  ],
+  "weighting": {
+   "type": "equal"
+  }
+ }
+}

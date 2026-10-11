@@ -1,0 +1,65 @@
+{
+ "id": "EXCONDITIONPATTERNAN",
+ "step": "root",
+ "name": "condition pattern any",
+ "description": "",
+ "rebalance": "daily",
+ "children": [
+  {
+   "id": "cdecf0d8-f7c0-5f9a-9857-ab30192b7007",
+   "step": "wt-cash-equal",
+   "children": [
+    {
+     "id": "91fc14bd-3a10-59d5-ae58-fc87fbdd3ad4",
+     "step": "if",
+     "children": [
+      {
+       "id": "afe1bb3b-2c7e-5972-ae4a-75e7dbad3e0c",
+       "step": "if-child",
+       "is-else-condition?": false,
+       "condition": {
+        "condition-type": "binary-compound",
+        "operator": "any",
+        "tickers": [
+         "NVDA",
+         "TSLA",
+         "AAPL"
+        ],
+        "lhs": {
+         "fn": "cumulative-return",
+         "params": {
+          "window": 10
+         },
+         "ticker": "%"
+        },
+        "comparator": "gt",
+        "rhs": {
+         "constant": 10
+        }
+       },
+       "children": [
+        {
+         "id": "73358c1c-a700-50a5-9a80-3a6d9d8b12aa",
+         "step": "asset",
+         "ticker": "QQQ"
+        }
+       ]
+      },
+      {
+       "id": "a719ec06-a008-5b6e-91d7-59d0f9e0431c",
+       "step": "if-child",
+       "is-else-condition?": true,
+       "children": [
+        {
+         "id": "ee6da47c-f214-531d-b7a8-f2e5bab6b722",
+         "step": "asset",
+         "ticker": "BIL"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

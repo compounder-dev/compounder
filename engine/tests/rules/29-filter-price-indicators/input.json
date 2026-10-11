@@ -1,0 +1,81 @@
+{
+ "id": "EXFILTERPRICEINDICAT",
+ "step": "root",
+ "name": "filter price indicators",
+ "description": "",
+ "rebalance": "daily",
+ "children": [
+  {
+   "id": "68cbeccb-da6e-52eb-a46a-dadde37af709",
+   "step": "wt-cash-equal",
+   "children": [
+    {
+     "id": "193b2f6c-c172-51c5-aaf8-906356c808d1",
+     "step": "filter",
+     "sort-by-fn": "moving-average-price",
+     "sort-by-fn-params": {
+      "window": 50
+     },
+     "select-fn": "top",
+     "select-n": "1",
+     "children": [
+      {
+       "id": "551009ff-c914-514c-937c-7261dbc748bd",
+       "step": "asset",
+       "ticker": "SPY"
+      },
+      {
+       "id": "484c50d5-3901-5fff-8cb0-0375180f032b",
+       "step": "asset",
+       "ticker": "QQQ"
+      }
+     ]
+    },
+    {
+     "id": "0ae15df8-10eb-5838-92a6-61ff0b611bc3",
+     "step": "filter",
+     "sort-by-fn": "exponential-moving-average-price",
+     "sort-by-fn-params": {
+      "window": 9
+     },
+     "select-fn": "bottom",
+     "select-n": "1",
+     "children": [
+      {
+       "id": "05ccb5db-6034-5126-a0f7-72dd789db0f1",
+       "step": "asset",
+       "ticker": "GLD"
+      },
+      {
+       "id": "0e7a2046-41e4-557b-ae69-59fe37f69b3e",
+       "step": "asset",
+       "ticker": "SLV"
+      }
+     ]
+    },
+    {
+     "id": "5d699d78-e03b-5b98-a4dc-0d1e2617e553",
+     "step": "filter",
+     "sort-by-fn": "standard-deviation-price",
+     "sort-by-fn-params": {
+      "window": 20
+     },
+     "select-fn": "bottom",
+     "select-n": "1",
+     "children": [
+      {
+       "id": "fa231a80-450a-5e02-8ae1-e0968499f18d",
+       "step": "asset",
+       "ticker": "XLU"
+      },
+      {
+       "id": "6d7f3bb7-2d32-5c09-aaf2-536f70bdd2dc",
+       "step": "asset",
+       "ticker": "XLP"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

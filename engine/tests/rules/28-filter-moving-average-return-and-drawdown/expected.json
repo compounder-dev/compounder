@@ -1,0 +1,82 @@
+{
+ "rebalance": {
+  "frequency": "monthly",
+  "type": "calendar"
+ },
+ "root": {
+  "block": "weight",
+  "children": [
+   {
+    "block": "filter",
+    "children": [
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "NVDA"
+      },
+      "block": "asset"
+     },
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "MSFT"
+      },
+      "block": "asset"
+     },
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "AMD"
+      },
+      "block": "asset"
+     }
+    ],
+    "count": 2,
+    "sort_by": {
+     "indicator": "average_return",
+     "window": 90
+    },
+    "take": "top"
+   },
+   {
+    "block": "filter",
+    "children": [
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "TLT"
+      },
+      "block": "asset"
+     },
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "IEF"
+      },
+      "block": "asset"
+     },
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "SHY"
+      },
+      "block": "asset"
+     }
+    ],
+    "count": 1,
+    "sort_by": {
+     "indicator": "max_drawdown",
+     "window": 30
+    },
+    "take": "bottom"
+   }
+  ],
+  "weighting": {
+   "shares": [
+    0.6,
+    0.4
+   ],
+   "type": "specified"
+  }
+ }
+}

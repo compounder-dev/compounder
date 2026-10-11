@@ -1,0 +1,53 @@
+{
+ "id": "EXMAXDRAWDOWN0000000",
+ "step": "root",
+ "name": "max drawdown",
+ "description": "",
+ "rebalance": "daily",
+ "children": [
+  {
+   "id": "dd87c0c7-8693-555a-bb88-448aa3c28033",
+   "step": "wt-cash-equal",
+   "children": [
+    {
+     "id": "9336c16f-f9de-5b9f-a64d-671a937c44ea",
+     "step": "if",
+     "children": [
+      {
+       "id": "e04963cc-3e38-5f4e-bd17-2fb1283f307b",
+       "step": "if-child",
+       "is-else-condition?": false,
+       "lhs-fn": "max-drawdown",
+       "lhs-val": "QQQ",
+       "lhs-fn-params": {
+        "window": 10
+       },
+       "comparator": "gt",
+       "rhs-fixed-value?": true,
+       "rhs-val": "6",
+       "children": [
+        {
+         "id": "26a2bcd1-62fc-569d-a911-e7019d6bcb8a",
+         "step": "asset",
+         "ticker": "BIL"
+        }
+       ]
+      },
+      {
+       "id": "6b5d19c5-0980-5c88-b76b-a29b4c290274",
+       "step": "if-child",
+       "is-else-condition?": true,
+       "children": [
+        {
+         "id": "ad207ca1-4a87-594b-880a-90bf5f42fa3a",
+         "step": "asset",
+         "ticker": "QQQ"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

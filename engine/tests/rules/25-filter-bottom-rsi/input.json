@@ -1,0 +1,42 @@
+{
+ "id": "EXFILTERBOTTOM000000",
+ "step": "root",
+ "name": "filter bottom",
+ "description": "",
+ "rebalance": "daily",
+ "children": [
+  {
+   "id": "d0a1f184-ec27-5b5d-861f-13400a568e4a",
+   "step": "wt-cash-equal",
+   "children": [
+    {
+     "id": "4258e313-fb6c-5efa-b0c4-e04051258a8f",
+     "step": "filter",
+     "sort-by-fn": "relative-strength-index",
+     "sort-by-fn-params": {
+      "window": 14
+     },
+     "select-fn": "bottom",
+     "select-n": "1",
+     "children": [
+      {
+       "id": "5bdc1ea5-f687-5498-b6ea-10513f4e5b04",
+       "step": "asset",
+       "ticker": "SPY"
+      },
+      {
+       "id": "6903ef6b-ef8c-5069-970d-dab68f86ac6d",
+       "step": "asset",
+       "ticker": "BND"
+      },
+      {
+       "id": "046772d2-1a59-5507-a0f3-24f790f4ca6a",
+       "step": "asset",
+       "ticker": "GLD"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

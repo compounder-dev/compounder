@@ -1,0 +1,27 @@
+{
+ "id": "EXMARKETCAP000000000",
+ "step": "root",
+ "name": "market cap",
+ "description": "",
+ "rebalance": "monthly",
+ "children": [
+  {
+   "id": "0caf6ef1-4167-520e-a523-cd351bbf9665",
+   "step": "wt-marketcap",
+   "children": [
+    {
+     "id": "bd90a6df-a52a-5cdd-aa94-222ca6561094",
+     "step": "asset",
+     "ticker": "AAPL",
+     "has_marketcap": true
+    },
+    {
+     "id": "a61b6682-9f54-5fb0-ac78-f09c29733cac",
+     "step": "asset",
+     "ticker": "MSFT",
+     "has_marketcap": true
+    }
+   ]
+  }
+ ]
+}

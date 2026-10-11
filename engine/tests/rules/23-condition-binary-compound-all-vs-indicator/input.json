@@ -1,0 +1,68 @@
+{
+ "id": "EXCONDITIONPATTERNAL",
+ "step": "root",
+ "name": "condition pattern all",
+ "description": "",
+ "rebalance": "daily",
+ "children": [
+  {
+   "id": "239a3955-0ae7-5d0e-92fa-57301193e675",
+   "step": "wt-cash-equal",
+   "children": [
+    {
+     "id": "efa2eb86-0cfd-5bff-8055-3493559c73c0",
+     "step": "if",
+     "children": [
+      {
+       "id": "c89c2d94-73a7-5d3e-bf44-3f266542fbfb",
+       "step": "if-child",
+       "is-else-condition?": false,
+       "condition": {
+        "condition-type": "binary-compound",
+        "operator": "all",
+        "tickers": [
+         "XLK",
+         "XLF"
+        ],
+        "lhs": {
+         "fn": "cumulative-return",
+         "params": {
+          "window": 20
+         },
+         "ticker": "%"
+        },
+        "comparator": "gte",
+        "rhs": {
+         "fn": "cumulative-return",
+         "params": {
+          "window": 20
+         },
+         "ticker": "SPY"
+        }
+       },
+       "children": [
+        {
+         "id": "12110719-cc50-5333-8711-bb82914402ce",
+         "step": "asset",
+         "ticker": "SPY"
+        }
+       ]
+      },
+      {
+       "id": "bf5b28e7-c34d-5275-b5a9-def2c3fd4fd7",
+       "step": "if-child",
+       "is-else-condition?": true,
+       "children": [
+        {
+         "id": "0442ab9e-c54c-5512-9164-c991bc57460b",
+         "step": "asset",
+         "ticker": "BIL"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

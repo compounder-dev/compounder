@@ -1,0 +1,79 @@
+{
+ "id": "EXCONDITIONANY000000",
+ "step": "root",
+ "name": "condition any",
+ "description": "",
+ "rebalance": "daily",
+ "children": [
+  {
+   "id": "03cb3de5-bbee-56a9-8db6-1f9c199eaf01",
+   "step": "wt-cash-equal",
+   "children": [
+    {
+     "id": "eea225a6-d31f-53e7-a30d-3c8f303475d2",
+     "step": "if",
+     "children": [
+      {
+       "id": "cfcce89e-f033-52a7-a7e5-624eb12a8010",
+       "step": "if-child",
+       "is-else-condition?": false,
+       "condition": {
+        "condition-type": "compound",
+        "operator": "any",
+        "conditions": [
+         {
+          "condition-type": "binary",
+          "lhs": {
+           "fn": "relative-strength-index",
+           "params": {
+            "window": 10
+           },
+           "ticker": "SPY"
+          },
+          "comparator": "gt",
+          "rhs": {
+           "constant": 80
+          }
+         },
+         {
+          "condition-type": "binary",
+          "lhs": {
+           "fn": "relative-strength-index",
+           "params": {
+            "window": 10
+           },
+           "ticker": "QQQ"
+          },
+          "comparator": "gt",
+          "rhs": {
+           "constant": 80
+          }
+         }
+        ]
+       },
+       "children": [
+        {
+         "id": "295b4afc-abb8-5add-92a8-68e6df46ee42",
+         "step": "asset",
+         "ticker": "BIL"
+        }
+       ]
+      },
+      {
+       "id": "e565d375-df5e-566f-b265-c48bbd24f696",
+       "step": "if-child",
+       "is-else-condition?": true,
+       "children": [
+        {
+         "id": "9119f945-52ce-5d5f-a3ba-bf4c6a2c0d64",
+         "step": "asset",
+         "ticker": "SPY"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,101 @@
+{
+ "id": "EXCONDITIONALLNESTED",
+ "step": "root",
+ "name": "condition all nested",
+ "description": "",
+ "rebalance": "daily",
+ "children": [
+  {
+   "id": "17d668d0-7366-5f90-84e1-867bfc6da557",
+   "step": "wt-cash-equal",
+   "children": [
+    {
+     "id": "d1b5b3dd-7414-5474-8d0f-b9737af19bae",
+     "step": "if",
+     "children": [
+      {
+       "id": "184c8445-7263-5905-95e5-e673bd59a775",
+       "step": "if-child",
+       "is-else-condition?": false,
+       "condition": {
+        "condition-type": "compound",
+        "operator": "all",
+        "conditions": [
+         {
+          "condition-type": "binary",
+          "lhs": {
+           "fn": "current-price",
+           "params": {},
+           "ticker": "SPY"
+          },
+          "comparator": "gt",
+          "rhs": {
+           "fn": "moving-average-price",
+           "params": {
+            "window": 200
+           },
+           "ticker": "SPY"
+          }
+         },
+         {
+          "condition-type": "compound",
+          "operator": "any",
+          "conditions": [
+           {
+            "condition-type": "binary",
+            "lhs": {
+             "fn": "cumulative-return",
+             "params": {
+              "window": 5
+             },
+             "ticker": "QQQ"
+            },
+            "comparator": "gt",
+            "rhs": {
+             "constant": 0
+            }
+           },
+           {
+            "condition-type": "binary",
+            "lhs": {
+             "fn": "max-drawdown",
+             "params": {
+              "window": 20
+             },
+             "ticker": "TLT"
+            },
+            "comparator": "lt",
+            "rhs": {
+             "constant": 10
+            }
+           }
+          ]
+         }
+        ]
+       },
+       "children": [
+        {
+         "id": "016c0fcb-8d05-5c7c-a6fd-139508645796",
+         "step": "asset",
+         "ticker": "QQQ"
+        }
+       ]
+      },
+      {
+       "id": "b1bf5197-eca0-5894-970f-c895ed931c1b",
+       "step": "if-child",
+       "is-else-condition?": true,
+       "children": [
+        {
+         "id": "5a0f7e75-f8fc-55d9-9a61-c018ddf98aae",
+         "step": "asset",
+         "ticker": "BIL"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,53 @@
+{
+ "rebalance": {
+  "frequency": "monthly",
+  "type": "calendar"
+ },
+ "root": {
+  "block": "weight",
+  "children": [
+   {
+    "block": "filter",
+    "children": [
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "META"
+      },
+      "block": "asset"
+     },
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "AMZN"
+      },
+      "block": "asset"
+     },
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "AAPL"
+      },
+      "block": "asset"
+     },
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "MSFT"
+      },
+      "block": "asset"
+     }
+    ],
+    "count": 2,
+    "sort_by": {
+     "indicator": "cumulative_return",
+     "window": 20
+    },
+    "take": "top"
+   }
+  ],
+  "weighting": {
+   "type": "equal"
+  }
+ }
+}

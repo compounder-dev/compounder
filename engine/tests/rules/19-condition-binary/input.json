@@ -1,0 +1,59 @@
+{
+ "id": "EXCONDITIONBINARY000",
+ "step": "root",
+ "name": "condition binary",
+ "description": "",
+ "rebalance": "daily",
+ "children": [
+  {
+   "id": "d6a43ce9-efd7-5873-a25e-3805846bee0b",
+   "step": "wt-cash-equal",
+   "children": [
+    {
+     "id": "dc1a7a6b-aef0-5474-8d74-2930d5a2ae2a",
+     "step": "if",
+     "children": [
+      {
+       "id": "c8bb96de-1ef2-5165-9e0a-8d263e85cee7",
+       "step": "if-child",
+       "is-else-condition?": false,
+       "condition": {
+        "condition-type": "binary",
+        "lhs": {
+         "fn": "relative-strength-index",
+         "params": {
+          "window": 14
+         },
+         "ticker": "SPY"
+        },
+        "comparator": "gt",
+        "rhs": {
+         "constant": 70
+        }
+       },
+       "children": [
+        {
+         "id": "56e87dff-5676-5b77-9b22-984515217a41",
+         "step": "asset",
+         "ticker": "BIL"
+        }
+       ]
+      },
+      {
+       "id": "ce48bedb-f9a6-57af-abb8-1fb5af63bcc5",
+       "step": "if-child",
+       "is-else-condition?": true,
+       "children": [
+        {
+         "id": "8314de4e-dfb4-5786-a9d9-544b43e8e294",
+         "step": "asset",
+         "ticker": "SPY"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

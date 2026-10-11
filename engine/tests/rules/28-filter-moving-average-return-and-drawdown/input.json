@@ -1,0 +1,77 @@
+{
+ "id": "EXFILTERMARETURN0000",
+ "step": "root",
+ "name": "filter ma return",
+ "description": "",
+ "rebalance": "monthly",
+ "children": [
+  {
+   "id": "dfae8e07-0573-53f9-b399-9be28437bf1b",
+   "step": "wt-cash-specified",
+   "children": [
+    {
+     "id": "adc0d68d-e0b6-5298-8f39-5e74dda166e5",
+     "step": "filter",
+     "sort-by-fn": "moving-average-return",
+     "sort-by-fn-params": {
+      "window": 90
+     },
+     "select-fn": "top",
+     "select-n": "2",
+     "children": [
+      {
+       "id": "2e48f2e7-c867-50c1-9a76-b7d743501080",
+       "step": "asset",
+       "ticker": "NVDA"
+      },
+      {
+       "id": "084e4604-bb2b-5a43-a513-57c77c3687b6",
+       "step": "asset",
+       "ticker": "MSFT"
+      },
+      {
+       "id": "b066f9d5-6f7d-5d40-bf7f-53c03aa9e36b",
+       "step": "asset",
+       "ticker": "AMD"
+      }
+     ],
+     "weight": {
+      "num": 60,
+      "den": 100
+     }
+    },
+    {
+     "id": "b88de043-916c-53cc-aa33-62b62807434f",
+     "step": "filter",
+     "sort-by-fn": "max-drawdown",
+     "sort-by-fn-params": {
+      "window": 30
+     },
+     "select-fn": "bottom",
+     "select-n": "1",
+     "children": [
+      {
+       "id": "3899c8eb-521d-585a-b602-0ecf801e41b7",
+       "step": "asset",
+       "ticker": "TLT"
+      },
+      {
+       "id": "b4294c6d-88b7-5e1b-8321-d919190bf27a",
+       "step": "asset",
+       "ticker": "IEF"
+      },
+      {
+       "id": "8fbdb57d-e8d1-5f06-984d-b5e4a804ad76",
+       "step": "asset",
+       "ticker": "SHY"
+      }
+     ],
+     "weight": {
+      "num": 40,
+      "den": 100
+     }
+    }
+   ]
+  }
+ ]
+}

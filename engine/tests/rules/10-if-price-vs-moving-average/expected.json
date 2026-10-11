@@ -1,0 +1,53 @@
+{
+ "rebalance": {
+  "frequency": "daily",
+  "type": "calendar"
+ },
+ "root": {
+  "block": "weight",
+  "children": [
+   {
+    "block": "if",
+    "condition": {
+     "compare": "above",
+     "left": {
+      "asset": {
+       "market": "equities",
+       "symbol": "SPY"
+      },
+      "indicator": "price"
+     },
+     "right": {
+      "asset": {
+       "market": "equities",
+       "symbol": "SPY"
+      },
+      "indicator": "average_price",
+      "window": 200
+     }
+    },
+    "else": [
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "BIL"
+      },
+      "block": "asset"
+     }
+    ],
+    "then": [
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "SPY"
+      },
+      "block": "asset"
+     }
+    ]
+   }
+  ],
+  "weighting": {
+   "type": "equal"
+  }
+ }
+}

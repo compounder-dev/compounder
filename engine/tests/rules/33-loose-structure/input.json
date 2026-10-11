@@ -1,0 +1,109 @@
+{
+ "id": "EXLOOSESTRUCTURE0000",
+ "step": "root",
+ "name": "loose structure",
+ "description": "",
+ "rebalance": "daily",
+ "children": [
+  {
+   "id": "b63afa6a-ec62-5e4a-ad5b-43b72cd966ca",
+   "step": "wt-cash-equal",
+   "children": [
+    {
+     "id": "bdb351e6-f511-51ba-9eea-98da94b96dff",
+     "step": "if",
+     "children": [
+      {
+       "id": "949f4f9f-5866-5edb-887d-cd67132110d6",
+       "step": "if-child",
+       "is-else-condition?": false,
+       "lhs-fn": "current-price",
+       "lhs-val": "SPY",
+       "comparator": "gt",
+       "rhs-fixed-value?": true,
+       "rhs-val": "0",
+       "children": [
+        {
+         "id": "7dc4f40c-f48b-5112-91b0-a7e4083d0ae7",
+         "step": "if",
+         "children": [
+          {
+           "id": "029d068d-1f6c-5d4e-91ab-f6c38faeef47",
+           "step": "if-child",
+           "is-else-condition?": false,
+           "lhs-fn": "current-price",
+           "lhs-val": "QQQ",
+           "comparator": "gt",
+           "rhs-fixed-value?": true,
+           "rhs-val": "0",
+           "children": [
+            {
+             "id": "c35b82a4-c711-539a-bec0-b0857ee44dea",
+             "step": "asset",
+             "ticker": "XLK"
+            }
+           ]
+          },
+          {
+           "id": "c4fc0029-2b2f-5ceb-8174-466e86d32ca2",
+           "step": "if-child",
+           "is-else-condition?": true,
+           "children": [
+            {
+             "id": "88600eb4-4340-50e2-bbf6-9e8a8e43f1d1",
+             "step": "asset",
+             "ticker": "XLF"
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "id": "0265f6f7-8f5b-59e2-bfb5-74377ecb4507",
+       "step": "if-child",
+       "is-else-condition?": true,
+       "children": [
+        {
+         "id": "5cc64cfe-3b5e-5e32-9baf-3aa5b7537b8a",
+         "step": "filter",
+         "sort-by-fn": "cumulative-return",
+         "sort-by-fn-params": {
+          "window": 5
+         },
+         "select-fn": "top",
+         "select-n": "1",
+         "children": [
+          {
+           "id": "a3d35a0c-4c50-5386-9943-17d7f82fb12d",
+           "step": "asset",
+           "ticker": "XLE"
+          },
+          {
+           "id": "2e16b1d8-7b42-55be-83b3-1168fc39682d",
+           "step": "asset",
+           "ticker": "XLV"
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "7b52cbb2-56d3-5da0-9a0f-4ee42ba9d1d5",
+     "step": "group",
+     "name": "g",
+     "children": [
+      {
+       "id": "0b72e98e-3046-50f7-8308-97e142193205",
+       "step": "asset",
+       "ticker": "XLI"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

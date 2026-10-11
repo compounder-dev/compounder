@@ -1,0 +1,75 @@
+{
+ "id": "EXLEGACYWINDOWS00000",
+ "step": "root",
+ "name": "legacy windows",
+ "description": "",
+ "rebalance": "none",
+ "rebalance-corridor-width": 0.05,
+ "children": [
+  {
+   "id": "ad064e3e-dec7-566a-b181-22dd25602d97",
+   "step": "wt-cash-equal",
+   "children": [
+    {
+     "id": "436f7ed2-0d91-5355-9445-75d17ad43609",
+     "step": "if",
+     "children": [
+      {
+       "id": "9952c831-3e10-5bfe-a58b-f96cef3328c9",
+       "step": "if-child",
+       "is-else-condition?": false,
+       "lhs-fn": "relative-strength-index",
+       "lhs-val": "TQQQ",
+       "lhs-window-days": "10",
+       "comparator": "gt",
+       "rhs-fixed-value?": false,
+       "rhs-fn": "relative-strength-index",
+       "rhs-val": "SPY",
+       "rhs-window-days": "10",
+       "children": [
+        {
+         "id": "a6f7a1b1-93a6-5f2d-babf-02143083a9cd",
+         "step": "asset",
+         "ticker": "UVXY"
+        }
+       ]
+      },
+      {
+       "id": "032df5a8-b20b-5934-91cc-f9e2afe110a9",
+       "step": "if-child",
+       "is-else-condition?": true,
+       "children": [
+        {
+         "id": "9d72807a-544f-534c-8984-1d28b6e24226",
+         "step": "wt-cash-equal",
+         "children": [
+          {
+           "id": "fb9dc202-a92f-596c-b5c5-8d83dd91f2f6",
+           "step": "filter",
+           "sort-by-fn": "relative-strength-index",
+           "sort-by-window-days": "10",
+           "select-fn": "top",
+           "select-n": "1",
+           "children": [
+            {
+             "id": "f500c939-3b68-52f1-a53f-35aece730f4b",
+             "step": "asset",
+             "ticker": "SQQQ"
+            },
+            {
+             "id": "84b93425-5b49-55c0-9cc8-ce919e801fa1",
+             "step": "asset",
+             "ticker": "BSV"
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,57 @@
+{
+ "id": "EXSTDEVRETURN0000000",
+ "step": "root",
+ "name": "stdev return",
+ "description": "",
+ "rebalance": "daily",
+ "children": [
+  {
+   "id": "87ecdbec-8c1d-5498-b415-8ad754477669",
+   "step": "wt-cash-equal",
+   "children": [
+    {
+     "id": "73297455-cd67-58ef-b771-d3d0dbda1f82",
+     "step": "if",
+     "children": [
+      {
+       "id": "7fcd8096-ca1e-50c9-8c5f-d343517054c7",
+       "step": "if-child",
+       "is-else-condition?": false,
+       "lhs-fn": "standard-deviation-return",
+       "lhs-val": "SPY",
+       "lhs-fn-params": {
+        "window": 20
+       },
+       "comparator": "lt",
+       "rhs-fixed-value?": false,
+       "rhs-fn": "standard-deviation-return",
+       "rhs-val": "TLT",
+       "rhs-fn-params": {
+        "window": 20
+       },
+       "children": [
+        {
+         "id": "236d72a3-2a76-5864-95b5-b40af8a0771f",
+         "step": "asset",
+         "ticker": "SPY"
+        }
+       ]
+      },
+      {
+       "id": "cd9e7075-c916-5ad5-906d-4687d23c8c52",
+       "step": "if-child",
+       "is-else-condition?": true,
+       "children": [
+        {
+         "id": "ae777cbe-aefc-5a6b-921d-343bc8c64096",
+         "step": "asset",
+         "ticker": "TLT"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,37 @@
+{
+ "id": "EXCRYPTO000000000000",
+ "step": "root",
+ "name": "crypto",
+ "description": "",
+ "rebalance": "daily",
+ "asset_class": "CRYPTO",
+ "children": [
+  {
+   "id": "a657aefd-beaa-5cfc-b550-d171b9df60e5",
+   "step": "wt-cash-specified",
+   "children": [
+    {
+     "id": "0d68e93e-be59-50bc-9a7f-098d2159852b",
+     "step": "asset",
+     "ticker": "TQQQ",
+     "name": "ProShares UltraPro QQQ 3x Shares",
+     "exchange": "XNAS",
+     "weight": {
+      "num": "60",
+      "den": 100
+     }
+    },
+    {
+     "id": "244c7d47-2a92-5dd2-addb-21f4f60b5e3e",
+     "step": "asset",
+     "ticker": "CRYPTO::BTC//USD",
+     "name": "Bitcoin",
+     "weight": {
+      "num": "40",
+      "den": 100
+     }
+    }
+   ]
+  }
+ ]
+}

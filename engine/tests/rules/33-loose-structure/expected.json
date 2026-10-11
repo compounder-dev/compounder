@@ -1,0 +1,108 @@
+{
+ "rebalance": {
+  "frequency": "daily",
+  "type": "calendar"
+ },
+ "root": {
+  "block": "weight",
+  "children": [
+   {
+    "block": "if",
+    "condition": {
+     "compare": "above",
+     "left": {
+      "asset": {
+       "market": "equities",
+       "symbol": "SPY"
+      },
+      "indicator": "price"
+     },
+     "right": {
+      "fixed": 0
+     }
+    },
+    "else": [
+     {
+      "block": "filter",
+      "children": [
+       {
+        "asset": {
+         "market": "equities",
+         "symbol": "XLE"
+        },
+        "block": "asset"
+       },
+       {
+        "asset": {
+         "market": "equities",
+         "symbol": "XLV"
+        },
+        "block": "asset"
+       }
+      ],
+      "count": 1,
+      "sort_by": {
+       "indicator": "cumulative_return",
+       "window": 5
+      },
+      "take": "top"
+     }
+    ],
+    "then": [
+     {
+      "block": "if",
+      "condition": {
+       "compare": "above",
+       "left": {
+        "asset": {
+         "market": "equities",
+         "symbol": "QQQ"
+        },
+        "indicator": "price"
+       },
+       "right": {
+        "fixed": 0
+       }
+      },
+      "else": [
+       {
+        "asset": {
+         "market": "equities",
+         "symbol": "XLF"
+        },
+        "block": "asset"
+       }
+      ],
+      "then": [
+       {
+        "asset": {
+         "market": "equities",
+         "symbol": "XLK"
+        },
+        "block": "asset"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "block": "weight",
+    "children": [
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "XLI"
+      },
+      "block": "asset"
+     }
+    ],
+    "weighting": {
+     "type": "equal"
+    }
+   }
+  ],
+  "weighting": {
+   "type": "equal"
+  }
+ }
+}

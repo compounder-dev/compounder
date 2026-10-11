@@ -1,0 +1,32 @@
+{
+ "rebalance": {
+  "corridor": 0.05,
+  "type": "threshold"
+ },
+ "root": {
+  "block": "weight",
+  "children": [
+   {
+    "asset": {
+     "market": "equities",
+     "symbol": "SPY"
+    },
+    "block": "asset"
+   },
+   {
+    "asset": {
+     "market": "equities",
+     "symbol": "TLT"
+    },
+    "block": "asset"
+   }
+  ],
+  "weighting": {
+   "shares": [
+    0.5,
+    0.5
+   ],
+   "type": "specified"
+  }
+ }
+}

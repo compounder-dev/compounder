@@ -1,0 +1,19 @@
+{
+ "id": "EXEMPTYPLACEHOLDER00",
+ "step": "root",
+ "name": "empty placeholder",
+ "description": "",
+ "rebalance": "daily",
+ "children": [
+  {
+   "id": "3eb107f2-6d40-5180-9d67-c8eeb911424b",
+   "step": "wt-cash-equal",
+   "children": [
+    {
+     "id": "ad4b2ebc-b512-5159-9ca8-b162d4d13e7a",
+     "step": "empty"
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,56 @@
+{
+ "id": "EXGROUP0000000000000",
+ "step": "root",
+ "name": "group",
+ "description": "",
+ "rebalance": "daily",
+ "children": [
+  {
+   "id": "26cfc6a8-d3d4-5f1a-8b4e-6ea10e2574fb",
+   "step": "wt-cash-equal",
+   "children": [
+    {
+     "id": "d21291ba-8371-5e44-9f7b-15dca29d36a8",
+     "step": "group",
+     "name": "Stocks",
+     "children": [
+      {
+       "id": "33b5292d-309e-56ad-8b2c-a0e51b630098",
+       "step": "wt-cash-equal",
+       "children": [
+        {
+         "id": "b0b32af0-a0dc-55a4-ba17-73bd0948795a",
+         "step": "asset",
+         "ticker": "SPY"
+        },
+        {
+         "id": "679c73f3-d196-5c52-bcee-d658538592fd",
+         "step": "asset",
+         "ticker": "QQQ"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "921dd40e-e94e-5de7-a83f-b558f16f2948",
+     "step": "group",
+     "name": "Bonds",
+     "children": [
+      {
+       "id": "c380b81f-46e0-548f-9578-84c477f8ab52",
+       "step": "wt-cash-equal",
+       "children": [
+        {
+         "id": "a969c94e-d4d0-5815-81fc-038c771da79b",
+         "step": "asset",
+         "ticker": "TLT"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

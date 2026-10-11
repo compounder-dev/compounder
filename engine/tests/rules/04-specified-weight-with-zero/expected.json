@@ -1,0 +1,32 @@
+{
+ "rebalance": {
+  "frequency": "monthly",
+  "type": "calendar"
+ },
+ "root": {
+  "block": "weight",
+  "children": [
+   {
+    "asset": {
+     "market": "equities",
+     "symbol": "SPY"
+    },
+    "block": "asset"
+   },
+   {
+    "asset": {
+     "market": "equities",
+     "symbol": "BIL"
+    },
+    "block": "asset"
+   }
+  ],
+  "weighting": {
+   "shares": [
+    1,
+    0
+   ],
+   "type": "specified"
+  }
+ }
+}

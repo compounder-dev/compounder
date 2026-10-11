@@ -1,0 +1,34 @@
+{
+ "id": "EXTICKERS00000000000",
+ "step": "root",
+ "name": "tickers",
+ "description": "",
+ "rebalance": "daily",
+ "children": [
+  {
+   "id": "d7fb09b4-4a47-5650-8bfb-b59b4be7133d",
+   "step": "wt-cash-equal",
+   "children": [
+    {
+     "id": "8830a288-71f6-5c22-a3de-c130e043f9ea",
+     "step": "asset",
+     "ticker": "BRK/B",
+     "name": "Berkshire Hathaway Inc. Class B",
+     "exchange": "XNYS"
+    },
+    {
+     "id": "5bae86c3-204e-5ff0-a47d-197aca97d2c5",
+     "step": "asset",
+     "ticker": "EQUITIES::AAPL//USD",
+     "name": "Apple Inc."
+    },
+    {
+     "id": "1e988ba6-88b3-53af-bc08-0ded526b34b7",
+     "step": "asset",
+     "ticker": "SPY",
+     "exchange": "ARCX"
+    }
+   ]
+  }
+ ]
+}

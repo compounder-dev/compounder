@@ -1,0 +1,46 @@
+{
+ "rebalance": {
+  "frequency": "daily",
+  "type": "calendar"
+ },
+ "root": {
+  "block": "weight",
+  "children": [
+   {
+    "block": "filter",
+    "children": [
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "SPY"
+      },
+      "block": "asset"
+     },
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "BND"
+      },
+      "block": "asset"
+     },
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "GLD"
+      },
+      "block": "asset"
+     }
+    ],
+    "count": 1,
+    "sort_by": {
+     "indicator": "relative_strength",
+     "window": 14
+    },
+    "take": "bottom"
+   }
+  ],
+  "weighting": {
+   "type": "equal"
+  }
+ }
+}

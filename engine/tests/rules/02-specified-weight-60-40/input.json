@@ -1,0 +1,37 @@
+{
+ "id": "EXSPECIFIED604000000",
+ "step": "root",
+ "name": "specified 60 40",
+ "description": "",
+ "rebalance": "quarterly",
+ "children": [
+  {
+   "id": "2ce04c49-bb04-5be7-896f-61a9712e0f84",
+   "step": "wt-cash-specified",
+   "children": [
+    {
+     "id": "edbf40d9-0b69-5a95-a7a1-325970089610",
+     "step": "asset",
+     "ticker": "VTI",
+     "name": "Vanguard Total Stock Market ETF",
+     "exchange": "ARCX",
+     "weight": {
+      "num": "60",
+      "den": 100
+     }
+    },
+    {
+     "id": "e0f4a8fa-4ed2-5576-9b7a-69db3b733563",
+     "step": "asset",
+     "ticker": "BND",
+     "name": "Vanguard Total Bond Market ETF",
+     "exchange": "XNAS",
+     "weight": {
+      "num": 40,
+      "den": 100
+     }
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,31 @@
+{
+ "id": "EXINVERSEVOLATILITY0",
+ "step": "root",
+ "name": "inverse volatility",
+ "description": "",
+ "rebalance": "weekly",
+ "children": [
+  {
+   "id": "72563160-f0ba-5c2a-9dae-f6b78a7ab38c",
+   "step": "wt-inverse-vol",
+   "window-days": 20,
+   "children": [
+    {
+     "id": "a2fac5b2-c267-5980-bf32-b25a101be9da",
+     "step": "asset",
+     "ticker": "VTI"
+    },
+    {
+     "id": "a032ef37-94de-5269-8c59-229d462a317a",
+     "step": "asset",
+     "ticker": "TLT"
+    },
+    {
+     "id": "7ed4462b-7d09-594a-b70c-ba2dabb780d3",
+     "step": "asset",
+     "ticker": "GLD"
+    }
+   ]
+  }
+ ]
+}

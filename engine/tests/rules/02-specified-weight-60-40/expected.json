@@ -1,0 +1,32 @@
+{
+ "rebalance": {
+  "frequency": "quarterly",
+  "type": "calendar"
+ },
+ "root": {
+  "block": "weight",
+  "children": [
+   {
+    "asset": {
+     "market": "equities",
+     "symbol": "VTI"
+    },
+    "block": "asset"
+   },
+   {
+    "asset": {
+     "market": "equities",
+     "symbol": "BND"
+    },
+    "block": "asset"
+   }
+  ],
+  "weighting": {
+   "shares": [
+    0.6,
+    0.4
+   ],
+   "type": "specified"
+  }
+ }
+}

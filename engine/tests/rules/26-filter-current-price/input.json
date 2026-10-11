@@ -1,0 +1,34 @@
+{
+ "id": "EXFILTERPRICE0000000",
+ "step": "root",
+ "name": "filter price",
+ "description": "",
+ "rebalance": "daily",
+ "children": [
+  {
+   "id": "d2dd8a55-df30-510c-9abf-af2f09d89a5b",
+   "step": "wt-cash-equal",
+   "children": [
+    {
+     "id": "fdfef7f0-5302-5ccc-9979-0da44ca9ab85",
+     "step": "filter",
+     "sort-by-fn": "current-price",
+     "select-fn": "top",
+     "select-n": "1",
+     "children": [
+      {
+       "id": "42f1883f-21d7-5b6b-83a3-81b9d84b4fc6",
+       "step": "asset",
+       "ticker": "SPY"
+      },
+      {
+       "id": "10d676aa-d3ff-53d9-9830-f2af82fa38c3",
+       "step": "asset",
+       "ticker": "QQQ"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

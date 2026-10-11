@@ -1,0 +1,73 @@
+{
+ "id": "EXFILTERGROUPS000000",
+ "step": "root",
+ "name": "filter groups",
+ "description": "",
+ "rebalance": "daily",
+ "children": [
+  {
+   "id": "bfdbdc29-7d3b-5cb1-a2e4-354faf3ca434",
+   "step": "wt-cash-equal",
+   "children": [
+    {
+     "id": "798d9d7e-9c1f-5fed-97da-aa2c70e4e1a4",
+     "step": "filter",
+     "sort-by-fn": "standard-deviation-return",
+     "sort-by-fn-params": {
+      "window": 20
+     },
+     "select-fn": "bottom",
+     "select-n": "1",
+     "children": [
+      {
+       "id": "8f08c5ec-f7dc-563c-a4bc-20244fddcbcc",
+       "step": "group",
+       "name": "Tech",
+       "children": [
+        {
+         "id": "f0627dab-9f77-5bd1-8cbf-2f19974921e2",
+         "step": "wt-cash-equal",
+         "children": [
+          {
+           "id": "1295a8f5-84e4-55f8-b2b7-0cddeccdc77e",
+           "step": "asset",
+           "ticker": "QQQ"
+          },
+          {
+           "id": "0d0270da-1df4-5c27-b331-6074092b3ae4",
+           "step": "asset",
+           "ticker": "XLK"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "id": "d2f2555a-4db3-5cf8-ab45-ee1b936170fa",
+       "step": "group",
+       "name": "Defensive",
+       "children": [
+        {
+         "id": "1e5b635b-8ec3-520d-82e0-aa2745702afb",
+         "step": "wt-cash-equal",
+         "children": [
+          {
+           "id": "63487932-0b30-5b48-9770-b0670cc0a27b",
+           "step": "asset",
+           "ticker": "XLU"
+          },
+          {
+           "id": "098caa8f-1b16-57e8-820b-4ed94bb6e28c",
+           "step": "asset",
+           "ticker": "XLP"
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

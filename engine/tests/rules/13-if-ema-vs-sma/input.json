@@ -1,0 +1,57 @@
+{
+ "id": "EXEMAVSSMA0000000000",
+ "step": "root",
+ "name": "ema vs sma",
+ "description": "",
+ "rebalance": "daily",
+ "children": [
+  {
+   "id": "48fa78ac-d8c3-5ce0-98da-d2eb9b8eb583",
+   "step": "wt-cash-equal",
+   "children": [
+    {
+     "id": "1022b9b3-fb7a-5012-8b45-f58df340a9a0",
+     "step": "if",
+     "children": [
+      {
+       "id": "0fd13e8b-4a8b-56ef-94a2-f7a542e18357",
+       "step": "if-child",
+       "is-else-condition?": false,
+       "lhs-fn": "exponential-moving-average-price",
+       "lhs-val": "GLD",
+       "lhs-fn-params": {
+        "window": 9
+       },
+       "comparator": "gte",
+       "rhs-fixed-value?": false,
+       "rhs-fn": "moving-average-price",
+       "rhs-val": "SLV",
+       "rhs-fn-params": {
+        "window": 20
+       },
+       "children": [
+        {
+         "id": "aed8cbc0-c5d2-5fd7-aaa7-d563d6375dff",
+         "step": "asset",
+         "ticker": "GLD"
+        }
+       ]
+      },
+      {
+       "id": "e6816fb3-2e0b-5134-b460-c71fb2053b43",
+       "step": "if-child",
+       "is-else-condition?": true,
+       "children": [
+        {
+         "id": "3e08750b-416f-58da-89b6-18194c78a1d6",
+         "step": "asset",
+         "ticker": "SLV"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

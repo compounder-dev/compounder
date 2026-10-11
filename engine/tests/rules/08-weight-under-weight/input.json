@@ -1,0 +1,56 @@
+{
+ "id": "EXWEIGHTUNDERWEIGHT0",
+ "step": "root",
+ "name": "weight under weight",
+ "description": "",
+ "rebalance": "monthly",
+ "children": [
+  {
+   "id": "4ed762bb-ca1d-5917-a9a0-93e2b19bc3df",
+   "step": "wt-cash-specified",
+   "children": [
+    {
+     "id": "ea35a9aa-e68a-54f5-9d3d-6e33a9b2b533",
+     "step": "wt-cash-equal",
+     "children": [
+      {
+       "id": "2d9259fe-7667-53f0-8dc3-0a1d9fdb666a",
+       "step": "asset",
+       "ticker": "SPY"
+      },
+      {
+       "id": "9ee14e1b-04b6-53f4-9a45-128a65acd5fe",
+       "step": "asset",
+       "ticker": "QQQ"
+      }
+     ],
+     "weight": {
+      "num": 70,
+      "den": 100
+     }
+    },
+    {
+     "id": "9f50abb9-72fe-5e61-be7f-bcf1524e642f",
+     "step": "wt-inverse-vol",
+     "window-days": 30,
+     "children": [
+      {
+       "id": "3f190beb-af58-5a37-9196-5ed0f1b6f4df",
+       "step": "asset",
+       "ticker": "TLT"
+      },
+      {
+       "id": "2d57b580-fc38-5f30-a0be-24d914f5c590",
+       "step": "asset",
+       "ticker": "GLD"
+      }
+     ],
+     "weight": {
+      "num": 30,
+      "den": 100
+     }
+    }
+   ]
+  }
+ ]
+}

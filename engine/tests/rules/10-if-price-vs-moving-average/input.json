@@ -1,0 +1,54 @@
+{
+ "id": "EXPRICEVSMA000000000",
+ "step": "root",
+ "name": "price vs ma",
+ "description": "",
+ "rebalance": "daily",
+ "children": [
+  {
+   "id": "2a73dfdf-1ff5-5cfb-8857-4f52da69cc0d",
+   "step": "wt-cash-equal",
+   "children": [
+    {
+     "id": "f3c4852b-d97e-5094-8dad-325f4c690459",
+     "step": "if",
+     "children": [
+      {
+       "id": "f90c0ccb-ce60-59f3-b6d4-1b3efcc874c8",
+       "step": "if-child",
+       "is-else-condition?": false,
+       "lhs-fn": "current-price",
+       "lhs-val": "SPY",
+       "comparator": "gt",
+       "rhs-fixed-value?": false,
+       "rhs-fn": "moving-average-price",
+       "rhs-val": "SPY",
+       "rhs-fn-params": {
+        "window": 200
+       },
+       "children": [
+        {
+         "id": "be53b505-04b9-569c-a3d8-73927a3995c4",
+         "step": "asset",
+         "ticker": "SPY"
+        }
+       ]
+      },
+      {
+       "id": "2b9b932c-6218-52f8-8154-85bf425e0814",
+       "step": "if-child",
+       "is-else-condition?": true,
+       "children": [
+        {
+         "id": "79509b37-1707-597d-82f9-b5648c937ab2",
+         "step": "asset",
+         "ticker": "BIL"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,42 @@
+{
+ "id": "EXSPECIFIEDTHIRDS000",
+ "step": "root",
+ "name": "specified thirds",
+ "description": "",
+ "rebalance": "yearly",
+ "children": [
+  {
+   "id": "de400692-66cf-5785-8a98-274c0c8dbcef",
+   "step": "wt-cash-specified",
+   "children": [
+    {
+     "id": "839cf149-b455-5ee5-84d1-709bfa095b29",
+     "step": "asset",
+     "ticker": "SPY",
+     "weight": {
+      "num": 1,
+      "den": 3
+     }
+    },
+    {
+     "id": "9df1b11a-9957-54fa-9df3-68725ee7c84c",
+     "step": "asset",
+     "ticker": "TLT",
+     "weight": {
+      "num": 1,
+      "den": 3
+     }
+    },
+    {
+     "id": "897be6d5-b55d-5999-a4c1-baf78055e3b9",
+     "step": "asset",
+     "ticker": "GLD",
+     "weight": {
+      "num": 1,
+      "den": 3
+     }
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,53 @@
+{
+ "id": "EXMARETURNEQ00000000",
+ "step": "root",
+ "name": "ma return eq",
+ "description": "",
+ "rebalance": "daily",
+ "children": [
+  {
+   "id": "37a38bbf-fcc8-55ed-bf29-b97cc00d9b12",
+   "step": "wt-cash-equal",
+   "children": [
+    {
+     "id": "bb8e0602-39f0-5615-a982-50b4b1a0a5c1",
+     "step": "if",
+     "children": [
+      {
+       "id": "fc95f68c-a26f-5041-aacf-7682b5384011",
+       "step": "if-child",
+       "is-else-condition?": false,
+       "lhs-fn": "moving-average-return",
+       "lhs-val": "SPY",
+       "lhs-fn-params": {
+        "window": 20
+       },
+       "comparator": "eq",
+       "rhs-fixed-value?": true,
+       "rhs-val": "0",
+       "children": [
+        {
+         "id": "9d93fa6c-de4e-5505-89d9-eef6cb9a3a7f",
+         "step": "asset",
+         "ticker": "BIL"
+        }
+       ]
+      },
+      {
+       "id": "b5adb8c0-2ed3-520b-a616-11560aff5f02",
+       "step": "if-child",
+       "is-else-condition?": true,
+       "children": [
+        {
+         "id": "505d6094-61dd-5046-b602-297219f6990c",
+         "step": "asset",
+         "ticker": "SPY"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

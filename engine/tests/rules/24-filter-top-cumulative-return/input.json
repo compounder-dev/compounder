@@ -1,0 +1,47 @@
+{
+ "id": "EXFILTERTOP000000000",
+ "step": "root",
+ "name": "filter top",
+ "description": "",
+ "rebalance": "monthly",
+ "children": [
+  {
+   "id": "2fc1454c-a483-5fa7-bba1-beb0db47020c",
+   "step": "wt-cash-equal",
+   "children": [
+    {
+     "id": "6c785dbc-01a6-5e43-a6f1-443fcbb27b87",
+     "step": "filter",
+     "sort-by-fn": "cumulative-return",
+     "sort-by-fn-params": {
+      "window": 20
+     },
+     "select-fn": "top",
+     "select-n": "2",
+     "children": [
+      {
+       "id": "de204f94-b363-5d9b-8a73-f2dde9b7866a",
+       "step": "asset",
+       "ticker": "META"
+      },
+      {
+       "id": "092fdc34-9dbf-5f60-b46b-c59938cef7c8",
+       "step": "asset",
+       "ticker": "AMZN"
+      },
+      {
+       "id": "379b026a-7474-522d-896b-a88d7b317e0a",
+       "step": "asset",
+       "ticker": "AAPL"
+      },
+      {
+       "id": "2ab246d5-b525-500a-aa01-083a85a1189a",
+       "step": "asset",
+       "ticker": "MSFT"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

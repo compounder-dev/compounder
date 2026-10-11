@@ -1,0 +1,53 @@
+{
+ "id": "EXRSIVSFIXED00000000",
+ "step": "root",
+ "name": "rsi vs fixed",
+ "description": "",
+ "rebalance": "daily",
+ "children": [
+  {
+   "id": "04f9cf4d-a378-5a00-b866-85af3b47fa06",
+   "step": "wt-cash-equal",
+   "children": [
+    {
+     "id": "51d4436d-fcbe-5389-a537-adf96ce31796",
+     "step": "if",
+     "children": [
+      {
+       "id": "68e9e383-70f9-5d16-b0a2-8792a5b8c32c",
+       "step": "if-child",
+       "is-else-condition?": false,
+       "lhs-fn": "relative-strength-index",
+       "lhs-val": "QQQ",
+       "lhs-fn-params": {
+        "window": 10
+       },
+       "comparator": "lt",
+       "rhs-fixed-value?": true,
+       "rhs-val": "30",
+       "children": [
+        {
+         "id": "8c3d0e05-b2ff-59a7-920c-cbfb8bc813d1",
+         "step": "asset",
+         "ticker": "TQQQ"
+        }
+       ]
+      },
+      {
+       "id": "00cfac60-7018-5f77-b9a8-f0d9ce47cfc2",
+       "step": "if-child",
+       "is-else-condition?": true,
+       "children": [
+        {
+         "id": "7c90756f-b038-553d-b132-c3b7732fccc1",
+         "step": "asset",
+         "ticker": "BIL"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

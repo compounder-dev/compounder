@@ -1,0 +1,38 @@
+{
+ "rebalance": {
+  "frequency": "daily",
+  "type": "calendar"
+ },
+ "root": {
+  "block": "weight",
+  "children": [
+   {
+    "block": "filter",
+    "children": [
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "SPY"
+      },
+      "block": "asset"
+     },
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "QQQ"
+      },
+      "block": "asset"
+     }
+    ],
+    "count": 1,
+    "sort_by": {
+     "indicator": "price"
+    },
+    "take": "top"
+   }
+  ],
+  "weighting": {
+   "type": "equal"
+  }
+ }
+}

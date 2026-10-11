@@ -1,0 +1,97 @@
+{
+ "id": "EXELSEIFCHAIN0000000",
+ "step": "root",
+ "name": "else if chain",
+ "description": "",
+ "rebalance": "daily",
+ "children": [
+  {
+   "id": "94551b6c-8082-5279-9517-0a985e2fd09f",
+   "step": "wt-cash-equal",
+   "children": [
+    {
+     "id": "8374bd97-1cf0-5267-8b98-3db028910b4e",
+     "step": "if",
+     "children": [
+      {
+       "id": "68c25dac-fa4c-52ac-a872-cba2a58dfe98",
+       "step": "if-child",
+       "is-else-condition?": false,
+       "lhs-fn": "relative-strength-index",
+       "lhs-val": "SPY",
+       "lhs-fn-params": {
+        "window": 10
+       },
+       "comparator": "gt",
+       "rhs-fixed-value?": true,
+       "rhs-val": "80",
+       "children": [
+        {
+         "id": "bdffe6da-e96c-5e72-a712-f8ead64b392d",
+         "step": "asset",
+         "ticker": "BIL"
+        }
+       ]
+      },
+      {
+       "id": "f7c53c97-1635-5064-b185-9106564ea671",
+       "step": "if-child",
+       "is-else-condition?": true,
+       "children": [
+        {
+         "id": "1d737ee2-dd03-56d7-bb7d-de4c9e212127",
+         "step": "wt-cash-equal",
+         "children": [
+          {
+           "id": "43147bc0-895c-5533-b574-585dc0cf9041",
+           "step": "if",
+           "children": [
+            {
+             "id": "b8bd572c-7d07-5af4-af47-704a46034d6d",
+             "step": "if-child",
+             "is-else-condition?": false,
+             "lhs-fn": "relative-strength-index",
+             "lhs-val": "SPY",
+             "lhs-fn-params": {
+              "window": 10
+             },
+             "comparator": "lt",
+             "rhs-fixed-value?": true,
+             "rhs-val": "30",
+             "children": [
+              {
+               "id": "b53edf5e-28de-54d1-bb28-cb246d764585",
+               "step": "asset",
+               "ticker": "SPXL"
+              },
+              {
+               "id": "1917fdf1-bfd9-5228-94e2-c84e12c544a0",
+               "step": "asset",
+               "ticker": "TQQQ"
+              }
+             ]
+            },
+            {
+             "id": "5575a59e-dfba-5f73-9b2e-d6477930dd57",
+             "step": "if-child",
+             "is-else-condition?": true,
+             "children": [
+              {
+               "id": "8411d473-1f7a-5053-82b0-5a33f4843aa8",
+               "step": "asset",
+               "ticker": "SPY"
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

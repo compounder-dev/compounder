@@ -1,0 +1,25 @@
+{
+ "id": "EXEQUALWEIGHT0000000",
+ "step": "root",
+ "name": "equal weight",
+ "description": "",
+ "rebalance": "daily",
+ "children": [
+  {
+   "id": "bf857ce7-b0bb-5ae6-aada-887b35a6c331",
+   "step": "wt-cash-equal",
+   "children": [
+    {
+     "id": "ee467bd2-2923-50d7-a57c-c3a8f23c7b67",
+     "step": "asset",
+     "ticker": "SPY"
+    },
+    {
+     "id": "2b073c53-bdca-5a79-a72a-26028e09a977",
+     "step": "asset",
+     "ticker": "BND"
+    }
+   ]
+  }
+ ]
+}

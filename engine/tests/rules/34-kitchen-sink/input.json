@@ -1,0 +1,182 @@
+{
+ "id": "EXKITCHENSINK0000000",
+ "step": "root",
+ "name": "kitchen sink",
+ "description": "Example showing every type of block",
+ "rebalance": "weekly",
+ "children": [
+  {
+   "id": "f4069722-5896-56f0-a012-7a00162590de",
+   "step": "wt-cash-specified",
+   "children": [
+    {
+     "id": "86d33544-900f-5f7e-8fb8-24a73cb5ccf6",
+     "step": "group",
+     "name": "Trend",
+     "children": [
+      {
+       "id": "1d45c1b8-0ade-528f-adc3-1024aed0a4d2",
+       "step": "wt-cash-equal",
+       "children": [
+        {
+         "id": "c0fecd1c-f4f9-532e-b7cf-0c6c9205bdfe",
+         "step": "if",
+         "children": [
+          {
+           "id": "f6e7fde8-3b1e-544e-8b52-dd4ec3817a80",
+           "step": "if-child",
+           "is-else-condition?": false,
+           "lhs-fn": "current-price",
+           "lhs-val": "SPY",
+           "comparator": "gt",
+           "rhs-fixed-value?": false,
+           "rhs-fn": "moving-average-price",
+           "rhs-val": "SPY",
+           "rhs-fn-params": {
+            "window": 200
+           },
+           "children": [
+            {
+             "id": "15b1be96-95c0-5084-9686-9245470f9392",
+             "step": "wt-cash-equal",
+             "children": [
+              {
+               "id": "ae05a7ed-00b9-5b93-a6cb-280df45ddb72",
+               "step": "filter",
+               "sort-by-fn": "cumulative-return",
+               "sort-by-fn-params": {
+                "window": 60
+               },
+               "select-fn": "top",
+               "select-n": "2",
+               "children": [
+                {
+                 "id": "e9239593-58aa-5e80-8118-725b4b07dd41",
+                 "step": "asset",
+                 "ticker": "XLK"
+                },
+                {
+                 "id": "24658dc9-b22a-5164-80ba-f7ffad34e892",
+                 "step": "asset",
+                 "ticker": "XLF"
+                },
+                {
+                 "id": "5097f17c-7a9a-5065-b69c-a21cda0129f7",
+                 "step": "asset",
+                 "ticker": "XLE"
+                },
+                {
+                 "id": "f7aab51c-0e2f-5250-ab38-220d61c43c7a",
+                 "step": "asset",
+                 "ticker": "XLV"
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "id": "7cb40b71-82b8-55c3-ab68-442de5a9d932",
+           "step": "if-child",
+           "is-else-condition?": true,
+           "children": [
+            {
+             "id": "7c010ef8-db89-5acb-bf47-7b775a97cbb8",
+             "step": "wt-inverse-vol",
+             "window-days": 20,
+             "children": [
+              {
+               "id": "4d5873e5-aa1c-5a77-9124-205613f00789",
+               "step": "asset",
+               "ticker": "TLT"
+              },
+              {
+               "id": "0e653e3a-72d4-5705-b497-c7e2663d978f",
+               "step": "asset",
+               "ticker": "GLD"
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "weight": {
+      "num": 50,
+      "den": 100
+     }
+    },
+    {
+     "id": "a1cb51b0-f8cb-5dfe-b37d-3371e9bfc3cb",
+     "step": "group",
+     "name": "Mean reversion",
+     "children": [
+      {
+       "id": "2fbb1607-f9f3-5810-b76c-36b6e0933721",
+       "step": "wt-cash-equal",
+       "children": [
+        {
+         "id": "90353a96-fb64-5d99-8678-12a991e47b76",
+         "step": "if",
+         "children": [
+          {
+           "id": "06b135af-5a84-5928-b338-a768970187b0",
+           "step": "if-child",
+           "is-else-condition?": false,
+           "condition": {
+            "condition-type": "binary-compound",
+            "operator": "any",
+            "tickers": [
+             "SPY",
+             "QQQ"
+            ],
+            "lhs": {
+             "fn": "relative-strength-index",
+             "params": {
+              "window": 10
+             },
+             "ticker": "%"
+            },
+            "comparator": "lt",
+            "rhs": {
+             "constant": 30
+            }
+           },
+           "children": [
+            {
+             "id": "cced20b8-d342-5698-b1ef-57d89f6aaf1d",
+             "step": "asset",
+             "ticker": "TQQQ"
+            }
+           ]
+          },
+          {
+           "id": "40cdf2f5-74f6-570f-8767-1b8be629952c",
+           "step": "if-child",
+           "is-else-condition?": true,
+           "children": [
+            {
+             "id": "22baf325-d1d6-50dd-bd1a-a9bc0d452a99",
+             "step": "asset",
+             "ticker": "BIL"
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "weight": {
+      "num": 50,
+      "den": 100
+     }
+    }
+   ]
+  }
+ ]
+}

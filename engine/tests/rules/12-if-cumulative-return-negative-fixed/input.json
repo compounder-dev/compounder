@@ -1,0 +1,53 @@
+{
+ "id": "EXCUMULATIVERETURN00",
+ "step": "root",
+ "name": "cumulative return",
+ "description": "",
+ "rebalance": "daily",
+ "children": [
+  {
+   "id": "04fded79-55db-5be7-adbc-66e27d70f356",
+   "step": "wt-cash-equal",
+   "children": [
+    {
+     "id": "b5b067d3-a66b-5209-86d3-013e6f1ff785",
+     "step": "if",
+     "children": [
+      {
+       "id": "3f21c0a1-23af-552d-b55c-dadaa8d4123e",
+       "step": "if-child",
+       "is-else-condition?": false,
+       "lhs-fn": "cumulative-return",
+       "lhs-val": "QQQ",
+       "lhs-fn-params": {
+        "window": 5
+       },
+       "comparator": "lte",
+       "rhs-fixed-value?": true,
+       "rhs-val": "-5",
+       "children": [
+        {
+         "id": "50737316-560c-55b0-92e8-f099013d8b08",
+         "step": "asset",
+         "ticker": "BSV"
+        }
+       ]
+      },
+      {
+       "id": "9164797b-8c9c-5a1b-b941-4107194bc36a",
+       "step": "if-child",
+       "is-else-condition?": true,
+       "children": [
+        {
+         "id": "4778b8f7-a552-51bc-af79-68d08417745c",
+         "step": "asset",
+         "ticker": "QQQ"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

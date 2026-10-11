@@ -1,0 +1,92 @@
+{
+ "rebalance": {
+  "frequency": "daily",
+  "type": "calendar"
+ },
+ "root": {
+  "block": "weight",
+  "children": [
+   {
+    "block": "if",
+    "condition": {
+     "compare": "above",
+     "left": {
+      "asset": {
+       "market": "equities",
+       "symbol": "SPY"
+      },
+      "indicator": "relative_strength",
+      "window": 10
+     },
+     "right": {
+      "fixed": 0.8
+     }
+    },
+    "else": [
+     {
+      "block": "weight",
+      "children": [
+       {
+        "block": "if",
+        "condition": {
+         "compare": "below",
+         "left": {
+          "asset": {
+           "market": "equities",
+           "symbol": "SPY"
+          },
+          "indicator": "relative_strength",
+          "window": 10
+         },
+         "right": {
+          "fixed": 0.3
+         }
+        },
+        "else": [
+         {
+          "asset": {
+           "market": "equities",
+           "symbol": "SPY"
+          },
+          "block": "asset"
+         }
+        ],
+        "then": [
+         {
+          "asset": {
+           "market": "equities",
+           "symbol": "SPXL"
+          },
+          "block": "asset"
+         },
+         {
+          "asset": {
+           "market": "equities",
+           "symbol": "TQQQ"
+          },
+          "block": "asset"
+         }
+        ]
+       }
+      ],
+      "weighting": {
+       "type": "equal"
+      }
+     }
+    ],
+    "then": [
+     {
+      "asset": {
+       "market": "equities",
+       "symbol": "BIL"
+      },
+      "block": "asset"
+     }
+    ]
+   }
+  ],
+  "weighting": {
+   "type": "equal"
+  }
+ }
+}

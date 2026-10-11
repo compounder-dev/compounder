@@ -1,0 +1,53 @@
+{
+ "id": "EXSTDEVPRICE00000000",
+ "step": "root",
+ "name": "stdev price",
+ "description": "",
+ "rebalance": "daily",
+ "children": [
+  {
+   "id": "b141a8e9-0aca-5961-a598-752db9a2a153",
+   "step": "wt-cash-equal",
+   "children": [
+    {
+     "id": "9f5d64ba-e162-531a-b9c8-222164b02175",
+     "step": "if",
+     "children": [
+      {
+       "id": "0886adaa-55be-5c99-88ff-fa7a4e15d70a",
+       "step": "if-child",
+       "is-else-condition?": false,
+       "lhs-fn": "standard-deviation-price",
+       "lhs-val": "SPY",
+       "lhs-fn-params": {
+        "window": 20
+       },
+       "comparator": "lte",
+       "rhs-fixed-value?": true,
+       "rhs-val": "5.5",
+       "children": [
+        {
+         "id": "ab22e3f2-c638-59f6-b8f1-bb90b1e2ff9e",
+         "step": "asset",
+         "ticker": "SPY"
+        }
+       ]
+      },
+      {
+       "id": "8d5f006d-5d75-5635-a753-d6a4d589fb8e",
+       "step": "if-child",
+       "is-else-condition?": true,
+       "children": [
+        {
+         "id": "24f33edc-ba77-56d4-b2dd-4e9814dd72bb",
+         "step": "asset",
+         "ticker": "BIL"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

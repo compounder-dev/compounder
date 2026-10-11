@@ -1,0 +1,40 @@
+{
+ "rebalance": {
+  "frequency": "yearly",
+  "type": "calendar"
+ },
+ "root": {
+  "block": "weight",
+  "children": [
+   {
+    "asset": {
+     "market": "equities",
+     "symbol": "SPY"
+    },
+    "block": "asset"
+   },
+   {
+    "asset": {
+     "market": "equities",
+     "symbol": "TLT"
+    },
+    "block": "asset"
+   },
+   {
+    "asset": {
+     "market": "equities",
+     "symbol": "GLD"
+    },
+    "block": "asset"
+   }
+  ],
+  "weighting": {
+   "shares": [
+    0.3333333333333333,
+    0.3333333333333333,
+    0.3333333333333333
+   ],
+   "type": "specified"
+  }
+ }
+}
