@@ -164,6 +164,10 @@ contract SettlementTest is Test {
         return (quantity * price + 1e18 - 1) / 1e18;
     }
 
+    function _ceilDiv(uint256 a, uint256 b) private pure returns (uint256) {
+        return a == 0 ? 0 : (a - 1) / b + 1;
+    }
+
     /// A batch whose market leg buys `net` tokens for exactly `spend` cash.
     function _netBuy(MockToken token, uint256 net, uint256 spend, Settlement.Fill[] memory buys, Settlement.Fill[] memory sells)
         private
@@ -263,14 +267,27 @@ contract SettlementTest is Test {
     }
 
     function test_aBetterFillThanAskedIsSharedByTheBuyers() public {
-        // The market delivers 2.2 tokens for the price of 2.
-        bytes memory call = abi.encodeCall(MockRouter.swap, (cash, nvda, 500e18, 2.2e18, address(settlement)));
+        // The route promised 2 tokens for 500 and delivers 2.01.
+        bytes memory call = abi.encodeCall(MockRouter.swap, (cash, nvda, 500e18, 2.01e18, address(settlement)));
         Settlement.Fill[] memory buys = new Settlement.Fill[](2);
         buys[0] = Settlement.Fill(alice, 1.5e18);
         buys[1] = Settlement.Fill(carol, 0.5e18);
         _settle(Settlement.Trade(address(nvda), true, 2e18, 500e18, address(router), call, buys, _none()));
-        assertEq(nvda.balanceOf(alice), START_STOCK + 1.5e18 + 0.15e18);
-        assertEq(nvda.balanceOf(carol), START_STOCK + 0.5e18 + 0.05e18);
+        assertEq(nvda.balanceOf(alice), START_STOCK + 1.5e18 + 0.0075e18);
+        assertEq(nvda.balanceOf(carol), START_STOCK + 0.5e18 + 0.0025e18);
+        assertEq(cash.balanceOf(alice), START_CASH - 375e18);
+        assertEq(cash.balanceOf(carol), START_CASH - 125e18);
+        _assertHoldsNothing();
+    }
+
+    function test_aMatchedSellerGetsThePriceTheMarketGave_notTheWorstAllowed() public {
+        // The route promised at least 2 tokens for 502 and delivers 2.008: a price of 250.
+        // Bob, matched against Alice, is paid 250 a token, not the 251 the route allowed for.
+        bytes memory call = abi.encodeCall(MockRouter.swap, (cash, nvda, 502e18, 2.008e18, address(settlement)));
+        _settle(Settlement.Trade(address(nvda), true, 2e18, 502e18, address(router), call, _fills(alice, 3e18), _fills(bob, 1e18)));
+        assertEq(cash.balanceOf(bob), START_CASH + 250e18, "the seller was paid something other than the market price");
+        assertEq(nvda.balanceOf(alice), START_STOCK + 3.008e18);
+        assertEq(cash.balanceOf(alice), START_CASH - 752e18, "the buyer paid something other than the market's cash plus the seller's");
         _assertHoldsNothing();
     }
 
@@ -286,8 +303,9 @@ contract SettlementTest is Test {
         buys[1] = Settlement.Fill(carol, carolBuys);
         _settle(_netBuy(nvda, net, spend, buys, _fills(bob, bobSells)));
         uint256 price = (spend * 1e18 + net - 1) / net;
+        uint256 owed = spend + (bobSells * price) / 1e18;
         assertEq(cash.balanceOf(bob), START_CASH + (bobSells * price) / 1e18, "a seller is paid the floor of what it sold");
-        assertEq(cash.balanceOf(alice), START_CASH - _ceil(aliceBuys, price), "a buyer pays the ceiling");
+        assertEq(cash.balanceOf(alice), START_CASH - _ceilDiv(owed * aliceBuys, aliceBuys + carolBuys), "a buyer pays its share, rounded up");
         _assertHoldsNothing();
     }
 
@@ -369,11 +387,11 @@ contract SettlementTest is Test {
     }
 
     function test_aBetterFillThanAskedCannotPushABuyerPastItsTarget() public {
-        // Alice asks for exactly the 52 tokens she has room for; the market delivers 53.
-        bytes memory call = abi.encodeCall(MockRouter.swap, (cash, nvda, 13_000e18, 53e18, address(settlement)));
+        // Alice asks for exactly the 52 tokens she has room for; the market delivers 52.1.
+        bytes memory call = abi.encodeCall(MockRouter.swap, (cash, nvda, 13_000e18, 52.1e18, address(settlement)));
         Settlement.Trade memory trade =
             Settlement.Trade(address(nvda), true, 52e18, 13_000e18, address(router), call, _fills(alice, 52e18), _none());
-        vm.expectRevert(abi.encodeWithSelector(Settlement.PastTarget.selector, alice, address(nvda), 38_250e18, 38_000e18));
+        vm.expectRevert(abi.encodeWithSelector(Settlement.PastTarget.selector, alice, address(nvda), 38_025e18, 38_000e18));
         _settle(trade);
     }
 
@@ -760,12 +778,15 @@ contract SettlementTest is Test {
         mix.sells = sells;
     }
 
-    function _assertSettledAt(Mix memory mix, uint256 price) private view {
+    /// `owed` is what buyers share when the batch bought on the market, and zero when it sold.
+    function _assertSettledAt(Mix memory mix, uint256 price, uint256 owed) private view {
         address[3] memory who = [alice, bob, carol];
         for (uint256 i = 0; i < 3; i++) {
             if (mix.buyQty[i] != 0) {
+                uint256 cost = owed == 0 ? _ceil(mix.buyQty[i], price) : _ceilDiv(owed * mix.buyQty[i], mix.bought);
                 assertEq(nvda.balanceOf(who[i]), START_STOCK + mix.buyQty[i], "a buyer did not receive what it paid for");
-                assertEq(cash.balanceOf(who[i]), START_CASH - _ceil(mix.buyQty[i], price), "a buyer paid the wrong amount");
+                assertEq(cash.balanceOf(who[i]), START_CASH - cost, "a buyer paid the wrong amount");
+                assertLe(cost, _ceil(mix.buyQty[i], price) + 1, "a buyer paid more than the batch price");
             } else {
                 assertEq(nvda.balanceOf(who[i]), START_STOCK - mix.sellQty[i], "a seller gave up the wrong amount");
                 assertEq(cash.balanceOf(who[i]), START_CASH + (mix.sellQty[i] * price) / 1e18, "a seller was not paid in full");
@@ -790,13 +811,14 @@ contract SettlementTest is Test {
             uint256 spend = (net * feedPrice * skewBps) / (1e18 * 10_000);
             vm.assume(spend > 0);
             _settle(_netBuy(nvda, net, spend, mix.buys, mix.sells));
-            _assertSettledAt(mix, (spend * 1e18 + net - 1) / net);
+            uint256 price = (spend * 1e18 + net - 1) / net;
+            _assertSettledAt(mix, price, spend + (mix.sold * price) / 1e18);
         } else {
             uint256 net = mix.sold - mix.bought;
             uint256 proceeds = (net * feedPrice * skewBps) / (1e18 * 10_000);
             vm.assume(proceeds > 0);
             _settle(_netSell(nvda, net, proceeds, mix.buys, mix.sells));
-            _assertSettledAt(mix, (proceeds * 1e18) / net);
+            _assertSettledAt(mix, (proceeds * 1e18) / net, 0);
         }
     }
 }

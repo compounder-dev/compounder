@@ -11,7 +11,7 @@ export LIVE=1
 export FORK_URL="${FORK_URL:-https://bsc-mainnet.public.blastapi.io}"
 
 # Each check gets fresh routes and its own copy of the chain.
-for check in test_live_twoAccountsBuyTogether test_live_oneSellsOneBuysTheRestGoesToMarket; do
+for check in test_live_twoAccountsBuyTogether test_live_oneSellsOneBuysTheRestGoesToMarket test_live_oneBuysOneSellsTheRestComesFromMarket; do
   python3 -I live/fetch_routes.py "$@"
   forge test --match-test "$check" -vv | grep -E "^\[(PASS|FAIL)|^  [A-Za-z]|Suite result"
 done

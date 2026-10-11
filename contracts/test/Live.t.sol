@@ -166,4 +166,40 @@ contract LiveTest is Test {
         console2.log("SELL matched buyer paid (cents)", bobPaid / 1e16);
         console2.log("SELL gas                 ", gasUsed);
     }
+
+    /// Alice buys, Bob sells part of it to her, and only the rest comes from the market.
+    function test_live_oneBuysOneSellsTheRestComesFromMarket() public {
+        _logFeed();
+        deal(token, bob, 1e18);
+        _open(bob, 0); // Bob's fund is getting out of the stock
+        uint256 spend = vm.parseJsonUint(fixture, ".buy.amountIn");
+        uint256 net = vm.parseJsonUint(fixture, ".buy.minAmountOut");
+        Settlement.Fill[] memory buys = new Settlement.Fill[](1);
+        buys[0] = Settlement.Fill(alice, net + 1e17);
+        Settlement.Fill[] memory matchedSell = new Settlement.Fill[](1);
+        matchedSell[0] = Settlement.Fill(bob, 1e17);
+        uint256 gasUsed = _settle(
+            Settlement.Trade(
+                token,
+                true,
+                net,
+                spend,
+                vm.parseJsonAddress(fixture, ".buy.router"),
+                vm.parseJsonBytes(fixture, ".buy.data"),
+                buys,
+                matchedSell
+            )
+        );
+
+        uint256 bobGot = IToken(cash).balanceOf(bob) - 1_000e18;
+        uint256 alicePaid = 1_000e18 - IToken(cash).balanceOf(alice);
+        assertEq(IToken(token).balanceOf(bob), 9e17, "bob sold the wrong amount");
+        assertGe(IToken(token).balanceOf(alice), net + 1e17, "alice got less than her fill");
+        assertApproxEqAbs(alicePaid, spend + bobGot, 10, "alice paid something other than the market's cash plus bob's");
+        assertEq(IToken(token).balanceOf(address(settlement)), 0, "tokens left in the contract");
+        assertLt(IToken(cash).balanceOf(address(settlement)), 100, "cash left in the contract");
+        console2.log("MATCHED BUY price (cents)", (bobGot * 10) / 1e16);
+        console2.log("MATCHED BUY seller got (cents)", bobGot / 1e16);
+        console2.log("MATCHED BUY gas          ", gasUsed);
+    }
 }

@@ -368,8 +368,8 @@ contract Settlement {
     }
 
     /// @dev Buyers outnumber sellers. Collect each buyer's worst-case cost,
-    ///      buy the difference on the market, then charge everyone the price
-    ///      that trade achieved and refund the rest.
+    ///      buy the difference on the market, then settle everyone at the
+    ///      price that trade achieved and refund the rest.
     function _buyOnMarket(Trade calldata trade, uint256 bought, uint256 sold, Band memory band) private returns (uint256 price) {
         uint256 net = trade.netQuantity;
         if (bought <= sold || bought - sold != net) revert NetQuantityMismatch(bought > sold ? bought - sold : 0, net);
@@ -386,31 +386,36 @@ contract Settlement {
 
         (uint256 spent, uint256 received) = _callRouter(trade, cash, trade.cashLimit, trade.token);
         if (received < net) revert MarketLegShort(net, received);
-        price = _ceilDiv(spent * ONE, net);
+        // The price the market really gave: what was spent, over everything
+        // it delivered. Never more than `worstPrice`.
+        price = _ceilDiv(spent * ONE, received);
         if (price < band.lowest || price > band.highest) revert PriceOutOfBand(price, band.lowest, band.highest);
 
-        _payBuyers(trade, bought, price, worstPrice, received - net, band.feed);
+        // Buyers owe the market's cash plus what the sellers are paid.
+        _payBuyers(trade, bought, spent + _floorValue(sold, price), worstPrice, received - net, band.feed);
     }
 
-    /// @dev Charge each buyer the batch price, refund what was collected
+    /// @dev Share `owed` among the buyers by size, refund what was collected
     ///      beyond it, and deliver the tokens. `surplus` is tokens the market
-    ///      delivered beyond the difference: a better fill than asked for.
-    ///      Buyers share it by size and the last buyer takes the rounding
-    ///      remainder, so no token is left behind. The target is checked
-    ///      again here against what each buyer really receives.
-    function _payBuyers(Trade calldata trade, uint256 bought, uint256 price, uint256 worstPrice, uint256 surplus, uint256 feed) private {
+    ///      delivered beyond the difference. Buyers share those by size too,
+    ///      so each pays the market's price for everything it receives. The
+    ///      last buyer takes the rounding remainder, so no token is left
+    ///      behind. The target is checked again here against what each buyer
+    ///      really receives.
+    function _payBuyers(Trade calldata trade, uint256 bought, uint256 owed, uint256 worstPrice, uint256 surplus, uint256 feed) private {
         uint256 surplusLeft = surplus;
         uint256 last = trade.buys.length - 1;
         for (uint256 i = 0; i <= last; i++) {
             Fill calldata fill = trade.buys[i];
-            uint256 cost = _ceilValue(fill.quantity, price);
+            // Never more than was collected: `owed / bought` is at most `worstPrice`.
+            uint256 cost = _ceilDiv(owed * fill.quantity, bought);
             uint256 extra = i == last ? surplusLeft : (surplus * fill.quantity) / bought;
             surplusLeft -= extra;
             _towardTarget(fill.account, trade.token, feed, fill.quantity + extra, true);
             _spend(fill.account, cost);
             _push(cash, fill.account, _ceilValue(fill.quantity, worstPrice) - cost);
             _push(trade.token, fill.account, fill.quantity + extra);
-            emit Filled(fill.account, trade.token, true, fill.quantity, cost);
+            emit Filled(fill.account, trade.token, true, fill.quantity + extra, cost);
         }
     }
 
