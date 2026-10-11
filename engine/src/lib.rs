@@ -8,5 +8,6 @@ pub mod history;
 pub mod indicator;
 pub mod rebalance;
 pub mod rules;
+pub mod schedule;
 pub mod stats;
 pub mod strategy;
