@@ -19,6 +19,7 @@ mod tracks;
 mod weigh;
 
 pub use compare::{holds, TOLERANCE};
+pub(crate) use span::day_text;
 pub use span::{Warning, WarningCode, Window};
 
 use crate::history::History;

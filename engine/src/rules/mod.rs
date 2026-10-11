@@ -297,6 +297,8 @@ pub enum IssueCode {
     MissingHistory,
     /// There is no trading day on which the strategy can be evaluated.
     NoTradingDay,
+    /// A backtest was asked for with settings it cannot run on.
+    InvalidRun,
 }
 
 /// One problem, tied to the place it is in.

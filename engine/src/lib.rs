@@ -1,7 +1,8 @@
 //! Portfolio engine: strategy documents, rule trees and their evaluation,
-//! exact-money rebalancing and batching.
+//! backtests, exact-money rebalancing and batching.
 //! Pure functions: no chain access, no file, no clock and no network.
 
+pub mod backtest;
 pub mod batch;
 pub mod evaluate;
 pub mod history;
