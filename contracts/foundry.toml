@@ -7,6 +7,8 @@ libs = ["lib"]
 solc = "0.8.24"
 optimizer = true
 optimizer_runs = 200
+# The live check reads a route fetched moments earlier.
+fs_permissions = [{ access = "read", path = "./test/fixtures" }]
 
 [fuzz]
 runs = 512

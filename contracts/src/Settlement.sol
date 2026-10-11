@@ -289,14 +289,25 @@ contract Settlement {
         price = _ceilDiv(spent * ONE, net);
         if (price < lowest || price > highest) revert PriceOutOfBand(price, lowest, highest);
 
-        // Tokens beyond the difference are a better fill than asked for; buyers share them.
-        uint256 surplus = received - net;
-        for (uint256 i = 0; i < trade.buys.length; i++) {
+        _payBuyers(trade, bought, price, worstPrice, received - net);
+    }
+
+    /// @dev Charge each buyer the batch price, refund what was collected
+    ///      beyond it, and deliver the tokens. `surplus` is tokens the market
+    ///      delivered beyond the difference: a better fill than asked for.
+    ///      Buyers share it by size and the last buyer takes the rounding
+    ///      remainder, so no token is left behind.
+    function _payBuyers(Trade calldata trade, uint256 bought, uint256 price, uint256 worstPrice, uint256 surplus) private {
+        uint256 surplusLeft = surplus;
+        uint256 last = trade.buys.length - 1;
+        for (uint256 i = 0; i <= last; i++) {
             Fill calldata fill = trade.buys[i];
             uint256 cost = _ceilValue(fill.quantity, price);
+            uint256 extra = i == last ? surplusLeft : (surplus * fill.quantity) / bought;
+            surplusLeft -= extra;
             _spend(fill.account, trade.token, cost);
             _push(cash, fill.account, _ceilValue(fill.quantity, worstPrice) - cost);
-            _push(trade.token, fill.account, fill.quantity + (surplus * fill.quantity) / bought);
+            _push(trade.token, fill.account, fill.quantity + extra);
             emit Filled(fill.account, trade.token, true, fill.quantity, cost);
         }
     }

@@ -4,6 +4,7 @@
 /web/src/engine.wasm
 /contracts/out/
 /contracts/cache/
+/contracts/test/fixtures/
 node_modules/
 
 # local environment and secrets
