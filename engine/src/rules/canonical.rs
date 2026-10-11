@@ -6,6 +6,7 @@
 //! go by position and a filter may break a tie by it.
 
 use super::{Asset, Comparator, Condition, Indicator, Market, Node, Operand, Reading, Rebalance, RuleStrategy, Take, Weighting};
+use serde::{Serialize, Serializer};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
@@ -19,9 +20,7 @@ impl RuleStrategy {
             Rebalance::Calendar(frequency) => json!({ "type": "calendar", "frequency": frequency.word() }),
             Rebalance::Threshold { corridor } => json!({ "type": "threshold", "corridor": corridor }),
         };
-        let mut text = String::new();
-        write(&json!({ "rebalance": rebalance, "root": node(&self.root) }), &mut text);
-        text
+        text(&json!({ "rebalance": rebalance, "root": node(&self.root) }))
     }
 
     /// SHA-256 of the canonical text, in hex.
@@ -30,11 +29,17 @@ impl RuleStrategy {
     }
 }
 
-fn nodes(nodes: &[Node]) -> Vec<Value> {
-    nodes.iter().map(node).collect()
+fn node(node: &Node) -> Value {
+    block(node, &mut self::node)
 }
 
-fn node(node: &Node) -> Value {
+/// One block in its canonical form, with each block inside it written by
+/// `inner`. The whole text comes from writing the blocks inside the same
+/// way. The evaluator writes the number it gave each one instead, and so
+/// finds equal sub-trees in one pass over the tree. `inner` is called for
+/// the children in order, and for an if the `then` blocks come first.
+pub(crate) fn block(node: &Node, inner: &mut dyn FnMut(&Node) -> Value) -> Value {
+    let mut nodes = |nodes: &[Node]| nodes.iter().map(&mut *inner).collect::<Vec<Value>>();
     match node {
         Node::Asset(held) => json!({ "block": "asset", "asset": asset(held) }),
         Node::Weight { weighting, children, .. } => {
@@ -46,7 +51,8 @@ fn node(node: &Node) -> Value {
             json!({ "block": "weight", "weighting": weighting, "children": nodes(children) })
         }
         Node::If { condition: test, then, otherwise } => {
-            json!({ "block": "if", "condition": condition(test), "then": nodes(then), "else": nodes(otherwise) })
+            let (then, otherwise) = (nodes(then), nodes(otherwise));
+            json!({ "block": "if", "condition": condition(test), "then": then, "else": otherwise })
         }
         Node::Filter { sort_by, take, count, children } => {
             let take = match take {
@@ -55,6 +61,21 @@ fn node(node: &Node) -> Value {
             };
             json!({ "block": "filter", "sort_by": indicator(sort_by), "take": take, "count": count, "children": nodes(children) })
         }
+    }
+}
+
+/// A canonical form as its one text.
+pub(crate) fn text(value: &Value) -> String {
+    let mut text = String::new();
+    write(value, &mut text);
+    text
+}
+
+/// An asset is written the one way wherever it is written: as it stands in
+/// the canonical form.
+impl Serialize for Asset {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        asset(self).serialize(serializer)
     }
 }
 

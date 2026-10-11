@@ -14,7 +14,7 @@
 
 use serde::Serialize;
 
-mod canonical;
+pub(crate) mod canonical;
 mod fixed;
 mod import;
 mod validate;
@@ -170,7 +170,7 @@ pub struct Reading {
 
 /// A number worked out from a daily series of closing prices. Windows are in
 /// trading days.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Indicator {
     /// The latest close.
     Price,
@@ -293,6 +293,10 @@ pub enum IssueCode {
     ExcessiveNodes,
     ExcessiveDepth,
     ExcessiveConditions,
+    /// An asset in the strategy has no prices to evaluate it on.
+    MissingHistory,
+    /// There is no trading day on which the strategy can be evaluated.
+    NoTradingDay,
 }
 
 /// One problem, tied to the place it is in.

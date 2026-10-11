@@ -5,7 +5,8 @@ edition = "2021"
 
 [dependencies]
 alloy-primitives = { version = "1", default-features = false, features = ["std"] }
-# Calendar days. Taken without its default features it brings nothing else.
+# Days, the adjusted series and the calendar, and nothing that reaches a
+# feed, so the engine still builds for the browser.
 compounder-prices = { path = "../prices", default-features = false }
 # Logarithms and powers worked out in plain arithmetic. The ones a machine
 # supplies differ in the last digit from one machine to the next, and a
