@@ -698,12 +698,12 @@ mod tests {
                 fn node(depth: usize, counter: &mut usize, next: &mut dyn FnMut() -> u64) -> Value {
                     *counter += 1;
                     let id = format!("b{counter}");
-                    if depth >= 4 || next() % 3 == 0 {
+                    if depth >= 4 || next().is_multiple_of(3) {
                         return json!({ "blockType": "asset", "assetId": address((next() % 12) as usize + 1), "blockIdForInstance": id });
                     }
                     let size = (next() % 4) as usize + 1;
                     let children: Vec<Value> = (0..size).map(|_| node(depth + 1, counter, next)).collect();
-                    if next() % 2 == 0 {
+                    if next().is_multiple_of(2) {
                         return json!({ "blockType": "weight", "weightType": "equal", "weightings": [], "children": children, "blockIdForInstance": id });
                     }
                     // Whole percentages that total exactly 100.

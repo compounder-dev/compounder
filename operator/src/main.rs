@@ -260,8 +260,8 @@ async fn print_targets(config: Config) -> Result<()> {
         out.push(serde_json::json!({
             "name": fund.name,
             "account": format!("{:#x}", fund.account),
-            "tokens": tokens.iter().map(|(token, _)| format!("{token:#x}")).collect::<Vec<_>>(),
-            "shares": tokens.iter().map(|(_, share)| share.to_string()).collect::<Vec<_>>(),
+            "tokens": tokens.keys().map(|token| format!("{token:#x}")).collect::<Vec<_>>(),
+            "shares": tokens.values().map(|share| share.to_string()).collect::<Vec<_>>(),
         }));
     }
     println!("{}", serde_json::to_string_pretty(&out)?);
