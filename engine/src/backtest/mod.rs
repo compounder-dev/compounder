@@ -26,6 +26,7 @@ use crate::evaluate::{day_text, Evaluator, Warning};
 use crate::history::History;
 use crate::rules::{Asset, Issue, IssueCode, Rebalance, RuleStrategy};
 use crate::schedule;
+use crate::stats::{self, Benchmark, Stats};
 use compounder_prices::day::Day;
 use orders::{Book, Traded};
 use serde::Serialize;
@@ -54,6 +55,8 @@ pub struct Run {
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Backtest {
+    /// The dollars the run started with.
+    pub capital: f64,
     #[serde(serialize_with = "day_text")]
     pub first_day: Day,
     #[serde(serialize_with = "day_text")]
@@ -164,6 +167,7 @@ pub fn backtest(strategy: &RuleStrategy, history: &History, run: &Run) -> Result
     }
     let picks = evaluator.on(window.last)?.weights;
     Ok(Backtest {
+        capital: run.capital,
         first_day: window.first,
         last_day: window.last,
         assets: assets.to_vec(),
@@ -172,6 +176,45 @@ pub fn backtest(strategy: &RuleStrategy, history: &History, run: &Run) -> Result
         picks,
         warnings: window.warnings,
     })
+}
+
+/// A backtest's daily series, column by column, as the statistics take it.
+struct Columns {
+    days: Vec<Day>,
+    values: Vec<f64>,
+    weights: Vec<Vec<f64>>,
+    bought: Vec<f64>,
+    sold: Vec<f64>,
+}
+
+impl Backtest {
+    fn columns(&self) -> Columns {
+        Columns {
+            days: self.days.iter().map(|day| day.day).collect(),
+            values: self.days.iter().map(|day| day.value).collect(),
+            weights: self.days.iter().map(|day| day.weights.clone()).collect(),
+            bought: self.days.iter().map(|day| day.bought).collect(),
+            sold: self.days.iter().map(|day| day.sold).collect(),
+        }
+    }
+
+    /// What the run's daily values add up to.
+    pub fn statistics(&self) -> Result<Stats, String> {
+        let columns = self.columns();
+        stats::statistics(&columns.run(self.capital))
+    }
+
+    /// How the run moved against a benchmark's prices, over the days both have.
+    pub fn against(&self, days: &[Day], prices: &[f64]) -> Result<Benchmark, String> {
+        let columns = self.columns();
+        stats::benchmark(&columns.run(self.capital), days, prices)
+    }
+}
+
+impl Columns {
+    fn run(&self, capital: f64) -> stats::Run<'_> {
+        stats::Run { capital, days: &self.days, values: &self.values, weights: &self.weights, bought: &self.bought, sold: &self.sold }
+    }
 }
 
 /// The evaluator only gives a window in which every asset has a price, so

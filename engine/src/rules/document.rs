@@ -36,6 +36,8 @@ use serde_json::{json, Map, Value};
 
 type Fields = Map<String, Value>;
 type Group = fn(Vec<Condition>) -> Condition;
+/// An indicator, once it is told its window.
+type Windowed = fn(u32) -> Indicator;
 
 const MARKETS: [(&str, Market); 2] = [("equities", Market::Equities), ("crypto", Market::Crypto)];
 const TAKES: [(&str, Take); 2] = [("top", Take::Top), ("bottom", Take::Bottom)];
@@ -48,7 +50,7 @@ const COMPARATORS: [(&str, Comparator); 5] = [
     ("at_most", Comparator::AtMost),
 ];
 /// Every indicator that looks back over a window, by its name.
-const WINDOWED: [(&str, fn(u32) -> Indicator); 8] = [
+const WINDOWED: [(&str, Windowed); 8] = [
     ("average_price", |window| Indicator::AveragePrice { window }),
     ("exponential_average_price", |window| Indicator::ExponentialAveragePrice { window }),
     ("price_deviation", |window| Indicator::PriceDeviation { window }),
