@@ -241,6 +241,100 @@ pub fn fill_net_sell(book: &Book, reference_price: U256, cushion_bps: u32, min_c
     })
 }
 
+/// A buy that was cut or left out because its account will not have the cash
+/// in time. It is picked up again in the next round.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Deferred {
+    pub account: String,
+    pub token: String,
+    pub wanted: U256,
+    /// What the account buys this round instead. Zero when left out entirely.
+    pub given: U256,
+}
+
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Schedule {
+    /// Books in the order they must settle.
+    pub books: Vec<Book>,
+    pub deferred: Vec<Deferred>,
+}
+
+/// Put books in an order in which every buyer has the cash when its turn
+/// comes, counting what the account holds now plus what its own sells bring
+/// in earlier in the same batch.
+///
+/// Sell proceeds are counted at the reference price less `band_bps`, the
+/// worst the settlement contract allows, so the order holds whatever the
+/// market does inside the band. A buyer who still cannot pay in full is cut
+/// to what it will have, or left out if that is under `min_buy`.
+pub fn schedule(
+    books: impl IntoIterator<Item = Book>,
+    cash: &BTreeMap<String, U256>,
+    prices: &BTreeMap<String, U256>,
+    band_bps: u32,
+    min_buy: U256,
+) -> Result<Schedule, String> {
+    if band_bps as u64 >= BASIS_POINTS {
+        return Err("the band must be under 100%".into());
+    }
+    let mut cash: BTreeMap<String, U256> = cash.iter().map(|(account, amount)| (account.to_ascii_lowercase(), *amount)).collect();
+    // What each seller is sure to receive.
+    let proceeds = |book: &Book| -> Result<Vec<U256>, String> {
+        let price = *prices.get(&book.token).ok_or_else(|| format!("no reference price for {}", book.token))?;
+        let floor_price = mul_div(price, U256::from(BASIS_POINTS - band_bps as u64), U256::from(BASIS_POINTS))?;
+        book.sells.iter().map(|(_, tokens)| mul_div(*tokens, floor_price, one())).collect()
+    };
+
+    let mut left: Vec<Book> = books.into_iter().filter(|book| !book.sells.is_empty() || !book.buys.is_empty()).collect();
+    let mut out = Schedule::default();
+    while !left.is_empty() {
+        let has = |account: &String| cash.get(account).copied().unwrap_or(U256::ZERO);
+        let ready = left.iter().position(|book| book.buys.iter().all(|(account, budget)| has(account) >= *budget));
+        let index = match ready {
+            Some(index) => index,
+            None => {
+                // No book can go as planned. Take the one that frees the most
+                // cash for the others and cut its buyers to what they hold.
+                let mut best = (0, U256::ZERO);
+                for (index, book) in left.iter().enumerate() {
+                    let freed = proceeds(book)?.into_iter().fold(U256::ZERO, |sum, amount| sum + amount);
+                    if index == 0 || freed > best.1 {
+                        best = (index, freed);
+                    }
+                }
+                let book = &mut left[best.0];
+                let token = book.token.clone();
+                let mut kept = Vec::with_capacity(book.buys.len());
+                for (account, budget) in book.buys.drain(..) {
+                    let held = cash.get(&account).copied().unwrap_or(U256::ZERO);
+                    let given = if held >= budget { budget } else if held >= min_buy { held } else { U256::ZERO };
+                    if given < budget {
+                        out.deferred.push(Deferred { account: account.clone(), token: token.clone(), wanted: budget, given });
+                    }
+                    if !given.is_zero() {
+                        kept.push((account, given));
+                    }
+                }
+                book.buys = kept;
+                best.0
+            }
+        };
+        let book = left.remove(index);
+        let received = proceeds(&book)?;
+        for (account, budget) in &book.buys {
+            let held = cash.entry(account.clone()).or_insert(U256::ZERO);
+            *held -= *budget;
+        }
+        for ((account, _), amount) in book.sells.iter().zip(received) {
+            *cash.entry(account.clone()).or_insert(U256::ZERO) += amount;
+        }
+        if !book.sells.is_empty() || !book.buys.is_empty() {
+            out.books.push(book);
+        }
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -411,5 +505,116 @@ mod tests {
             }
         }
         assert!(buys_seen > 50 && sells_seen > 50, "the cases did not cover both legs: {buys_seen} buys, {sells_seen} sells");
+    }
+
+    const AMZN: &str = "0x00000000000000000000000000000000000000b2";
+
+    fn amzn(mut order: Order) -> Order {
+        order.token = AMZN.into();
+        order
+    }
+
+    fn holdings(entries: &[(&str, f64)]) -> BTreeMap<String, U256> {
+        entries.iter().map(|(account, amount)| (account.to_string(), units(*amount))).collect()
+    }
+
+    fn reference() -> BTreeMap<String, U256> {
+        BTreeMap::from([(NVDA.to_string(), units(250.0)), (AMZN.to_string(), units(200.0))])
+    }
+
+    #[test]
+    fn a_fund_sells_before_it_spends_the_proceeds() {
+        // Bob holds no cash. He sells 4 NVDA and buys AMZN with the proceeds.
+        // AMZN sorts first, so settling in token order would fail.
+        let all = books(&[sell("bob", 4.0), amzn(buy("bob", 990.0))]).unwrap();
+        let plan = schedule(all.into_values(), &holdings(&[("bob", 0.0)]), &reference(), 100, units(1.0)).unwrap();
+        let order: Vec<&str> = plan.books.iter().map(|book| book.token.as_str()).collect();
+        assert_eq!(order, [NVDA, AMZN]);
+        // 4 tokens at 250 less the 1% band is 990, exactly what he planned to spend.
+        assert!(plan.deferred.is_empty());
+    }
+
+    #[test]
+    fn a_buyer_is_cut_to_what_its_sells_are_sure_to_bring() {
+        // Planned at the reference price, Bob expects 1,000. Only 990 is certain.
+        let all = books(&[sell("bob", 4.0), amzn(buy("bob", 1_000.0))]).unwrap();
+        let plan = schedule(all.into_values(), &holdings(&[]), &reference(), 100, units(1.0)).unwrap();
+        assert_eq!(plan.books[1].buys, [("bob".to_string(), units(990.0))]);
+        assert_eq!(plan.deferred, [Deferred { account: "bob".into(), token: AMZN.into(), wanted: units(1_000.0), given: units(990.0) }]);
+    }
+
+    #[test]
+    fn two_funds_waiting_on_each_other_are_untangled() {
+        // Alice sells NVDA to buy AMZN; Bob sells AMZN to buy NVDA. Neither holds cash.
+        let all = books(&[sell("alice", 4.0), amzn(buy("alice", 900.0)), amzn(sell("bob", 5.0)), buy("bob", 900.0)]).unwrap();
+        let plan = schedule(all.into_values(), &holdings(&[]), &reference(), 100, units(1.0)).unwrap();
+        assert_eq!(plan.books.len(), 2);
+        // The first book settles without its unfunded buyer; the second has its buyer paid from the first.
+        assert!(plan.books[0].buys.is_empty());
+        assert_eq!(plan.books[1].buys.len(), 1);
+        assert_eq!(plan.deferred.len(), 1);
+        assert_eq!(plan.deferred[0].given, U256::ZERO);
+        // No sell is ever dropped.
+        assert_eq!(plan.books.iter().map(|book| book.sells.len()).sum::<usize>(), 2);
+    }
+
+    #[test]
+    fn a_buyer_with_too_little_for_a_trade_is_left_out() {
+        let all = books(&[buy("carol", 500.0)]).unwrap();
+        let plan = schedule(all.into_values(), &holdings(&[("carol", 0.5)]), &reference(), 100, units(1.0)).unwrap();
+        assert!(plan.books.is_empty());
+        assert_eq!(plan.deferred[0].given, U256::ZERO);
+    }
+
+    /// Replaying any schedule with the worst prices the contract allows, no
+    /// account ever runs out of cash, and no sell is lost.
+    #[test]
+    fn schedules_never_leave_a_buyer_short() {
+        let mut state: u64 = 0x5C4ED;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        let tokens = [NVDA, AMZN, "0x00000000000000000000000000000000000000c3"];
+        let mut prices = reference();
+        prices.insert(tokens[2].to_string(), units(40.0));
+        let mut deferred_seen = 0;
+        for case in 0..500 {
+            let mut orders = Vec::new();
+            let mut cash = BTreeMap::new();
+            for n in 0..(next() % 4 + 1) {
+                let account = format!("account-{n}");
+                cash.insert(account.clone(), units((next() % 3_000) as f64));
+                for token in tokens {
+                    let mut order = match next() % 3 {
+                        0 => buy(&account, (next() % 2_000) as f64 + 2.0),
+                        1 => sell(&account, (next() % 8_000) as f64 / 1_000.0 + 0.01),
+                        _ => continue,
+                    };
+                    order.token = token.into();
+                    orders.push(order);
+                }
+            }
+            let all = books(&orders).unwrap();
+            let sells_before: usize = all.values().map(|book| book.sells.len()).sum();
+            let plan = schedule(all.into_values(), &cash, &prices, 100, units(1.0)).unwrap();
+            deferred_seen += plan.deferred.len();
+
+            assert_eq!(plan.books.iter().map(|book| book.sells.len()).sum::<usize>(), sells_before, "case {case}: a sell was lost");
+            for book in &plan.books {
+                let floor_price = prices[&book.token] * U256::from(99u8) / U256::from(100u8);
+                for (account, budget) in &book.buys {
+                    let held = cash.get_mut(account).unwrap();
+                    assert!(*held >= *budget, "case {case}: {account} cannot pay for {}", book.token);
+                    *held -= *budget;
+                }
+                for (account, sold) in &book.sells {
+                    *cash.get_mut(account).unwrap() += *sold * floor_price / one();
+                }
+            }
+        }
+        assert!(deferred_seen > 50, "the cases never ran short of cash: {deferred_seen}");
     }
 }
