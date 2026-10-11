@@ -26,19 +26,23 @@ fn text<'a>(value: &'a Value, path: &[&str]) -> Result<&'a str> {
     at.as_str().ok_or_else(|| anyhow!("`{}` is not text", path.join(".")))
 }
 
-/// Find a route that spends exactly `amount_in` of `token_in`, built for
-/// `taker` to both pay and receive. `only_venues` limits the route to a
-/// comma-separated list of venues.
-pub async fn fetch(
+/// A route the service has found, not yet turned into a call.
+pub struct Found {
+    summary: Value,
+    /// What the route is expected to return. The firm route built from it returns the same.
+    pub amount_out: U256,
+}
+
+/// Find the best route that spends exactly `amount_in` of `token_in`.
+/// `only_venues` limits the route to a comma-separated list of venues.
+pub async fn find(
     http: &reqwest::Client,
     api: &str,
     token_in: Address,
     token_out: Address,
     amount_in: U256,
-    taker: Address,
-    slippage_bps: u32,
     only_venues: Option<&str>,
-) -> Result<Route> {
+) -> Result<Found> {
     let mut query = vec![("tokenIn", format!("{token_in:#x}")), ("tokenOut", format!("{token_out:#x}")), ("amountIn", amount_in.to_string())];
     if let Some(venues) = only_venues {
         query.push(("includedSources", venues.to_string()));
@@ -53,12 +57,17 @@ pub async fn fetch(
         .context("the routing service refused the request")?
         .json()
         .await?;
-    let summary = found.pointer("/data/routeSummary").ok_or_else(|| anyhow!("no route between these tokens"))?;
+    let summary = found.pointer("/data/routeSummary").ok_or_else(|| anyhow!("no route between these tokens"))?.clone();
+    let amount_out = text(&summary, &["amountOut"])?.parse().context("amountOut is not a number")?;
+    Ok(Found { summary, amount_out })
+}
 
+/// Turn a found route into the exact call, built for `taker` to both pay and receive.
+pub async fn build(http: &reqwest::Client, api: &str, found: &Found, taker: Address, slippage_bps: u32) -> Result<Route> {
     let built: Value = http
         .post(format!("{api}/route/build"))
         .json(&json!({
-            "routeSummary": summary,
+            "routeSummary": found.summary,
             "sender": format!("{taker:#x}"),
             "recipient": format!("{taker:#x}"),
             "slippageTolerance": slippage_bps,
@@ -71,7 +80,7 @@ pub async fn fetch(
         .await?;
 
     let amount_out: U256 = text(&built, &["data", "amountOut"])?.parse().context("amountOut is not a number")?;
-    let venues = summary["route"]
+    let venues = found.summary["route"]
         .as_array()
         .into_iter()
         .flatten()

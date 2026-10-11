@@ -97,15 +97,40 @@ pub enum Leg {
     Matched,
 }
 
+/// The two prices a book is planned at. They differ because the public price
+/// is posted rarely, while the market moves all day.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Prices {
+    /// The public price the settlement contract values holdings at. A buyer's
+    /// budget is how far it sits below its target at this price, so it may
+    /// take no more tokens than the budget buys at this price.
+    pub public: U256,
+    /// What the market is expected to charge.
+    pub market: U256,
+}
+
+impl Prices {
+    /// For when the market trades at the public price.
+    pub fn same(price: U256) -> Self {
+        Prices { public: price, market: price }
+    }
+
+    /// The dearer of the two. Tokens bought at this price fit both the
+    /// buyer's target and the cash it set aside.
+    fn dearer(&self) -> U256 {
+        self.public.max(self.market)
+    }
+}
+
 /// Each buyer's budget with the cushion taken off, so a price a little worse
-/// than the reference still fits inside what the buyer set aside.
+/// than expected still fits inside what the buyer set aside.
 fn cushioned(cash: U256, cushion_bps: u32) -> Result<U256, String> {
     mul_div(cash, U256::from(BASIS_POINTS - cushion_bps as u64), U256::from(BASIS_POINTS))
 }
 
-fn check_inputs(reference_price: U256, cushion_bps: u32) -> Result<(), String> {
-    if reference_price.is_zero() {
-        return Err("no reference price".into());
+fn check_inputs(prices: Prices, cushion_bps: u32) -> Result<(), String> {
+    if prices.public.is_zero() || prices.market.is_zero() {
+        return Err("no price".into());
     }
     if cushion_bps as u64 >= BASIS_POINTS {
         return Err("the cushion must be under 100%".into());
@@ -113,22 +138,22 @@ fn check_inputs(reference_price: U256, cushion_bps: u32) -> Result<(), String> {
     Ok(())
 }
 
-/// Tokens each buyer can afford at the reference price, cushion applied.
-fn affordable(book: &Book, reference_price: U256, cushion_bps: u32) -> Result<Vec<U256>, String> {
+/// Tokens each buyer takes: what its budget buys at the dearer price, cushion applied.
+fn affordable(book: &Book, prices: Prices, cushion_bps: u32) -> Result<Vec<U256>, String> {
     book.buys
         .iter()
-        .map(|(_, cash)| mul_div(cushioned(*cash, cushion_bps)?, one(), reference_price))
+        .map(|(_, cash)| mul_div(cushioned(*cash, cushion_bps)?, one(), prices.dearer()))
         .collect()
 }
 
-/// Decide the market leg for a book at a reference price.
-pub fn leg(book: &Book, reference_price: U256, cushion_bps: u32) -> Result<Leg, String> {
-    check_inputs(reference_price, cushion_bps)?;
+/// Decide the market leg for a book.
+pub fn leg(book: &Book, prices: Prices, cushion_bps: u32) -> Result<Leg, String> {
+    check_inputs(prices, cushion_bps)?;
     let sold = book.sold();
-    let wanted = affordable(book, reference_price, cushion_bps)?.into_iter().fold(U256::ZERO, |sum, q| sum + q);
+    let wanted = affordable(book, prices, cushion_bps)?.into_iter().fold(U256::ZERO, |sum, q| sum + q);
     Ok(if wanted > sold {
-        // Cash left over once the sellers' tokens have been paid for at the reference price.
-        let spend = cushioned(book.budget(), cushion_bps)?.saturating_sub(mul_div_up(sold, reference_price, one())?);
+        // What the tokens the sellers cannot supply should cost on the market.
+        let spend = mul_div(wanted - sold, prices.market, one())?;
         if spend.is_zero() { Leg::Matched } else { Leg::Buy { cash_in: spend } }
     } else if sold > wanted {
         Leg::Sell { tokens_in: sold - wanted }
@@ -213,12 +238,12 @@ pub fn fill_net_buy(book: &Book, cash_in: U256, min_tokens_out: U256) -> Result<
 
 /// Fill a book whose market leg is a sell.
 ///
-/// Buyers take what they can afford at the reference price, with the cushion
+/// Buyers take what their budgets buy at the dearer price, with the cushion
 /// applied, straight from the sellers. The route sells the rest and must
 /// return at least `min_cash_out`.
-pub fn fill_net_sell(book: &Book, reference_price: U256, cushion_bps: u32, min_cash_out: U256) -> Result<TokenBatch, String> {
-    check_inputs(reference_price, cushion_bps)?;
-    let quantities = affordable(book, reference_price, cushion_bps)?;
+pub fn fill_net_sell(book: &Book, prices: Prices, cushion_bps: u32, min_cash_out: U256) -> Result<TokenBatch, String> {
+    check_inputs(prices, cushion_bps)?;
+    let quantities = affordable(book, prices, cushion_bps)?;
     let wanted = quantities.iter().fold(U256::ZERO, |sum, q| sum + *q);
     let sold = book.sold();
     if sold <= wanted {
@@ -263,10 +288,10 @@ pub struct Schedule {
 /// comes, counting what the account holds now plus what its own sells bring
 /// in earlier in the same batch.
 ///
-/// Sell proceeds are counted at the reference price less `band_bps`, the
-/// worst the settlement contract allows, so the order holds whatever the
-/// market does inside the band. A buyer who still cannot pay in full is cut
-/// to what it will have, or left out if that is under `min_buy`.
+/// Sell proceeds are counted at the expected price less `band_bps`, so the
+/// order holds if the market pays a little less. A buyer who still cannot
+/// pay in full is cut to what it will have, or left out if that is under
+/// `min_buy`.
 pub fn schedule(
     books: impl IntoIterator<Item = Book>,
     cash: &BTreeMap<String, U256>,
@@ -379,21 +404,38 @@ mod tests {
     fn more_buying_than_selling_sends_only_the_extra_cash_to_market() {
         // Buyers bring 1,000 of cash; a seller offers 1 token worth 250.
         let b = book(&[buy("alice", 600.0), buy("bob", 400.0), sell("carol", 1.0)]);
-        assert_eq!(leg(&b, units(250.0), 0).unwrap(), Leg::Buy { cash_in: units(750.0) });
+        assert_eq!(leg(&b, Prices::same(units(250.0)), 0).unwrap(), Leg::Buy { cash_in: units(750.0) });
         // With a 1% cushion the buyers hold back 10.
-        assert_eq!(leg(&b, units(250.0), 100).unwrap(), Leg::Buy { cash_in: units(740.0) });
+        assert_eq!(leg(&b, Prices::same(units(250.0)), 100).unwrap(), Leg::Buy { cash_in: units(740.0) });
     }
 
     #[test]
     fn more_selling_than_buying_sends_only_the_extra_tokens_to_market() {
         let b = book(&[sell("alice", 5.0), buy("bob", 250.0)]);
-        assert_eq!(leg(&b, units(250.0), 0).unwrap(), Leg::Sell { tokens_in: units(4.0) });
+        assert_eq!(leg(&b, Prices::same(units(250.0)), 0).unwrap(), Leg::Sell { tokens_in: units(4.0) });
+    }
+
+    #[test]
+    fn a_cheap_market_does_not_let_a_buyer_pass_its_target() {
+        // Alice is 1,000 below target at the public price of 250: room for 4 tokens.
+        let b = book(&[buy("alice", 1_000.0)]);
+        // The market sells at 200. She still takes 4 tokens, and spends only 800.
+        let cheap = Prices { public: units(250.0), market: units(200.0) };
+        assert_eq!(leg(&b, cheap, 0).unwrap(), Leg::Buy { cash_in: units(800.0) });
+        // The market sells at 400. Her 1,000 buys 2.5 tokens.
+        let dear = Prices { public: units(250.0), market: units(400.0) };
+        assert_eq!(leg(&b, dear, 0).unwrap(), Leg::Buy { cash_in: units(1_000.0) });
+
+        // Matched against a seller, she takes the same 4 tokens whatever the market pays.
+        let matched = book(&[buy("alice", 1_000.0), sell("bob", 10.0)]);
+        assert_eq!(leg(&matched, cheap, 0).unwrap(), Leg::Sell { tokens_in: units(6.0) });
+        assert_eq!(fill_net_sell(&matched, cheap, 0, units(1.0)).unwrap().buys[0].quantity, units(4.0));
     }
 
     #[test]
     fn an_exact_match_has_no_market_leg() {
         let b = book(&[sell("alice", 1.0), buy("bob", 250.0)]);
-        assert_eq!(leg(&b, units(250.0), 0).unwrap(), Leg::Matched);
+        assert_eq!(leg(&b, Prices::same(units(250.0)), 0).unwrap(), Leg::Matched);
     }
 
     #[test]
@@ -421,7 +463,7 @@ mod tests {
     #[test]
     fn a_net_sell_lets_buyers_take_from_sellers_first() {
         let b = book(&[sell("alice", 5.0), buy("bob", 250.0)]);
-        let batch = fill_net_sell(&b, units(250.0), 100, units(1_000.0)).unwrap();
+        let batch = fill_net_sell(&b, Prices::same(units(250.0)), 100, units(1_000.0)).unwrap();
         assert!(!batch.net_buy);
         // Bob's 250 less a 1% cushion buys 0.99 tokens at 250.
         assert_eq!(batch.buys[0].quantity, units(0.99));
@@ -435,13 +477,15 @@ mod tests {
         let sellers_only = book(&[sell("alice", 1.0)]);
         assert!(fill_net_buy(&sellers_only, units(100.0), units(0.4)).is_err());
         let buyers_only = book(&[buy("bob", 250.0)]);
-        assert!(fill_net_sell(&buyers_only, units(250.0), 0, units(1.0)).is_err());
-        assert!(leg(&buyers_only, U256::ZERO, 0).is_err());
-        assert!(leg(&buyers_only, units(250.0), 10_000).is_err());
+        assert!(fill_net_sell(&buyers_only, Prices::same(units(250.0)), 0, units(1.0)).is_err());
+        assert!(leg(&buyers_only, Prices::same(U256::ZERO), 0).is_err());
+        assert!(leg(&buyers_only, Prices::same(units(250.0)), 10_000).is_err());
     }
 
-    /// For any book, the fills satisfy the settlement contract's checks and no
-    /// buyer can be charged more than their budget at the worst allowed price.
+    /// For any book, and a market up to 4% either side of the public price,
+    /// the fills satisfy the settlement contract's checks, no buyer can be
+    /// charged more than their budget at the worst allowed price, and no
+    /// buyer takes more tokens than their budget buys at the public price.
     #[test]
     fn batches_always_fit_the_contract_and_the_budgets() {
         let mut state: u64 = 0xBA7C4;
@@ -466,11 +510,13 @@ mod tests {
             }
             let b = book(&orders);
             let cushion = 100;
-            match leg(&b, price, cushion).unwrap() {
+            let prices = Prices { public: price, market: price * U256::from(9_600 + next() % 801) / U256::from(10_000u64) };
+            let within_target = |fill: &Fill, cash: &U256| mul_div(fill.quantity, prices.public, one()).unwrap() <= *cash;
+            match leg(&b, prices, cushion).unwrap() {
                 Leg::Matched => {}
                 Leg::Buy { cash_in } => {
-                    // A market that fills 0.4% worse than the reference.
-                    let min_out = cash_in * one() / (price * U256::from(1_004u64) / U256::from(1_000u64));
+                    // A market that fills 0.4% worse than expected.
+                    let min_out = cash_in * one() / (prices.market * U256::from(1_004u64) / U256::from(1_000u64));
                     if min_out.is_zero() {
                         continue;
                     }
@@ -484,21 +530,23 @@ mod tests {
                     let worst = mul_div_up(batch.cash_limit, one(), batch.net_quantity).unwrap();
                     for (fill, (_, cash)) in batch.buys.iter().zip(&b.buys) {
                         assert!(mul_div_up(fill.quantity, worst, one()).unwrap() <= *cash, "case {case}: a buyer over budget");
+                        assert!(within_target(fill, cash), "case {case}: a buyer past its target");
                     }
                     buys_seen += 1;
                 }
                 Leg::Sell { tokens_in } => {
-                    let batch = match fill_net_sell(&b, price, cushion, U256::from(1u8)) {
+                    let batch = match fill_net_sell(&b, prices, cushion, U256::from(1u8)) {
                         Ok(batch) => batch,
                         Err(reason) if reason.contains("buys nothing") => continue,
                         Err(reason) => panic!("case {case}: {reason}"),
                     };
                     assert_eq!(batch.net_quantity, tokens_in, "case {case}");
                     assert_eq!(total(&batch.sells) - total(&batch.buys), batch.net_quantity, "case {case}");
-                    // The contract's band lets the price rise at most 1% above the reference.
-                    let ceiling = price * U256::from(101u64) / U256::from(100u64);
+                    // The cushion covers a market up to 1% dearer than expected.
+                    let ceiling = prices.market * U256::from(101u64) / U256::from(100u64);
                     for (fill, (_, cash)) in batch.buys.iter().zip(&b.buys) {
                         assert!(mul_div_up(fill.quantity, ceiling, one()).unwrap() <= *cash, "case {case}: a buyer over budget");
+                        assert!(within_target(fill, cash), "case {case}: a buyer past its target");
                     }
                     sells_seen += 1;
                 }

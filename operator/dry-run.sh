@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # One whole daily run on a private copy of the real chain: real tokens, the
-# real public price feed and real market routes. Nothing is sent to the real
-# network and no funds are used.
+# real public price feed, real market routes and the issuer's real quotes.
+# Nothing is sent to the real network and no funds are used.
 #
 # Three funds trade in one transaction:
 #   Ava deposits 1,000 dollars into seven stocks.
@@ -11,7 +11,7 @@
 # the market, and Ben's Tesla is bought with what he was just paid.
 #
 # Run it while the US market is open. Outside those hours several of these
-# stocks trade well away from the public price, and the contract refuses them.
+# stocks trade well away from the issuer's own price, and the contract refuses them.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export PATH="$HOME/.foundry/bin:$PATH"
@@ -22,6 +22,7 @@ ROUTING_API="${ROUTING_API:-https://aggregator-api.kyberswap.com/bsc/api/v1}"
 RPC=http://127.0.0.1:8546
 CASH=0x55d398326f99059ff775485246999027b3197955
 FEED=0x14032815B65f6B65f23d2532ad5F5DFf7BE48C03
+ISSUER=0x91f8Aff3738825e8eB16FC6f6b1A7A4647bDB299
 NVDA=0xa9ee28c80f960b889dfbd1902055218cba016f75
 TSLA=0x2494b603319d4d9f9715c9f4496d9e0364b59d93
 MAX=115792089237316195423570985008687907853269984665640564039457584007913129639935
@@ -56,9 +57,12 @@ cast rpc anvil_setBlockTimestampInterval 0 --rpc-url $RPC >/dev/null
 
 read -r ADMIN OPERATOR AVA BEN CY < <(cast rpc eth_accounts --rpc-url $RPC | python3 -I -c 'import json,sys; print(" ".join(json.load(sys.stdin)[:5]))')
 
-# The contract: prices within 1% of a public feed price no older than two days.
+# The contract: prices within 0.5% of the issuer's live quote, and the quote
+# within 5% of a public feed price no older than two days. A quote may
+# normally expire a minute ahead at most. This copy's clock is stopped, so a
+# fresh quote looks dated minutes ahead, and the limit is loosened to an hour.
 SETTLEMENT=$(forge create src/Settlement.sol:Settlement --root contracts --rpc-url $RPC --unlocked --from "$ADMIN" --broadcast \
-  --constructor-args $CASH $FEED "$ADMIN" "$OPERATOR" 100 172800 | awk '/Deployed to:/ {print $3}')
+  --constructor-args $CASH $FEED $ISSUER "$ADMIN" "$OPERATOR" 50 3600 500 172800 | awk '/Deployed to:/ {print $3}')
 COLLECTOR=$(call "$SETTLEMENT" "collector()(address)")
 cast rpc evm_setAutomine false --rpc-url $RPC >/dev/null
 

@@ -11,8 +11,9 @@ interface IToken {
 
 /// @notice The settlement contract on a private copy of the real chain:
 ///         real stock token, real cash token, real public price feed, and
-///         real swap routes fetched moments earlier by `live/fetch_routes.py`.
-///         Skipped unless LIVE=1, so the ordinary test run stays offline.
+///         real swap routes and issuer quotes fetched moments earlier by
+///         `live/check.sh`. Skipped unless LIVE=1, so the ordinary test run
+///         stays offline.
 contract LiveTest is Test {
     address constant FEED = 0x14032815B65f6B65f23d2532ad5F5DFf7BE48C03;
 
@@ -38,9 +39,14 @@ contract LiveTest is Test {
         token = vm.parseJsonAddress(fixture, ".token");
         address where = vm.parseJsonAddress(fixture, ".settlement");
 
-        // Batch prices must sit within 1% of the public feed.
+        // Batch prices must sit within 0.5% of the issuer's live quote, and
+        // the quote within 5% of the issuer's public feed.
         deployCodeTo(
-            "Settlement.sol:Settlement", abi.encode(cash, FEED, admin, operator, uint256(100), uint256(48 hours)), where
+            "Settlement.sol:Settlement",
+            abi.encode(
+                cash, FEED, vm.parseJsonAddress(fixture, ".issuer"), admin, operator, uint256(50), uint256(60), uint256(500), uint256(48 hours)
+            ),
+            where
         );
         settlement = Settlement(where);
         collector = settlement.collector();
@@ -79,6 +85,38 @@ contract LiveTest is Test {
         settlement.open(tokens, targets, 10_000e18);
     }
 
+    /// A trade through the fixture's `side` route ("buy" or "sell"), held to the issuer quote fetched with it.
+    function _trade(string memory side, uint256 net, uint256 cashLimit, Settlement.Fill[] memory buys, Settlement.Fill[] memory sells)
+        private
+        view
+        returns (Settlement.Trade memory trade)
+    {
+        string memory at = string.concat(".", side);
+        trade.token = token;
+        trade.netBuy = keccak256(bytes(side)) == keccak256("buy");
+        trade.netQuantity = net;
+        trade.cashLimit = cashLimit;
+        trade.router = vm.parseJsonAddress(fixture, string.concat(at, ".router"));
+        trade.routerCall = vm.parseJsonBytes(fixture, string.concat(at, ".data"));
+        trade.buys = buys;
+        trade.sells = sells;
+        trade.quote = _quote(string.concat(at, ".quote"));
+        trade.quoteSignature = vm.parseJsonBytes(fixture, string.concat(at, ".signature"));
+        console2.log("issuer quote (cents)     ", trade.quote.price / 1e16);
+    }
+
+    function _quote(string memory at) private view returns (Settlement.Quote memory quote) {
+        quote.chainId = vm.parseJsonUint(fixture, string.concat(at, ".chainId"));
+        quote.attestationId = vm.parseJsonUint(fixture, string.concat(at, ".attestationId"));
+        quote.userId = vm.parseJsonBytes32(fixture, string.concat(at, ".userId"));
+        quote.asset = vm.parseJsonAddress(fixture, string.concat(at, ".asset"));
+        quote.price = vm.parseJsonUint(fixture, string.concat(at, ".price"));
+        quote.quantity = vm.parseJsonUint(fixture, string.concat(at, ".quantity"));
+        quote.expiration = vm.parseJsonUint(fixture, string.concat(at, ".expiration"));
+        quote.side = uint8(vm.parseJsonUint(fixture, string.concat(at, ".side")));
+        quote.additionalData = vm.parseJsonBytes32(fixture, string.concat(at, ".additionalData"));
+    }
+
     function _settle(Settlement.Trade memory trade) private returns (uint256 gasUsed) {
         Settlement.Trade[] memory trades = new Settlement.Trade[](1);
         trades[0] = trade;
@@ -104,18 +142,7 @@ contract LiveTest is Test {
         Settlement.Fill[] memory buys = new Settlement.Fill[](2);
         buys[0] = Settlement.Fill(alice, (net * 60) / 100);
         buys[1] = Settlement.Fill(bob, net - (net * 60) / 100);
-        uint256 gasUsed = _settle(
-            Settlement.Trade(
-                token,
-                true,
-                net,
-                spend,
-                vm.parseJsonAddress(fixture, ".buy.router"),
-                vm.parseJsonBytes(fixture, ".buy.data"),
-                buys,
-                new Settlement.Fill[](0)
-            )
-        );
+        uint256 gasUsed = _settle(_trade("buy", net, spend, buys, new Settlement.Fill[](0)));
 
         uint256 aliceTokens = IToken(token).balanceOf(alice);
         uint256 bobTokens = IToken(token).balanceOf(bob);
@@ -142,18 +169,7 @@ contract LiveTest is Test {
         matchedBuy[0] = Settlement.Fill(bob, 1e17);
         Settlement.Fill[] memory sells = new Settlement.Fill[](1);
         sells[0] = Settlement.Fill(alice, aliceSells);
-        uint256 gasUsed = _settle(
-            Settlement.Trade(
-                token,
-                false,
-                netSell,
-                vm.parseJsonUint(fixture, ".sell.minAmountOut"),
-                vm.parseJsonAddress(fixture, ".sell.router"),
-                vm.parseJsonBytes(fixture, ".sell.data"),
-                matchedBuy,
-                sells
-            )
-        );
+        uint256 gasUsed = _settle(_trade("sell", netSell, vm.parseJsonUint(fixture, ".sell.minAmountOut"), matchedBuy, sells));
 
         uint256 sellPrice = ((IToken(cash).balanceOf(alice) - 1_000e18) * 1e18) / aliceSells;
         uint256 bobPaid = 1_000e18 - IToken(cash).balanceOf(bob);
@@ -178,18 +194,7 @@ contract LiveTest is Test {
         buys[0] = Settlement.Fill(alice, net + 1e17);
         Settlement.Fill[] memory matchedSell = new Settlement.Fill[](1);
         matchedSell[0] = Settlement.Fill(bob, 1e17);
-        uint256 gasUsed = _settle(
-            Settlement.Trade(
-                token,
-                true,
-                net,
-                spend,
-                vm.parseJsonAddress(fixture, ".buy.router"),
-                vm.parseJsonBytes(fixture, ".buy.data"),
-                buys,
-                matchedSell
-            )
-        );
+        uint256 gasUsed = _settle(_trade("buy", net, spend, buys, matchedSell));
 
         uint256 bobGot = IToken(cash).balanceOf(bob) - 1_000e18;
         uint256 alicePaid = 1_000e18 - IToken(cash).balanceOf(alice);

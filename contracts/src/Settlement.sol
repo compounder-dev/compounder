@@ -14,6 +14,14 @@ interface IPriceFeed {
         returns (uint256 price, uint64 lastUpdated, uint32 maxTimeDelay, uint16 deviationBps);
 }
 
+/// @notice The token issuer's own trading contract, as far as this contract
+///         reads it. The issuer signs a short-lived quote for every trade it
+///         is willing to make, and this says who may sign for it.
+interface IIssuer {
+    function getDomainSeparator() external view returns (bytes32);
+    function hasRole(bytes32 role, address account) external view returns (bool);
+}
+
 /// @title Collector
 /// @notice The only contract accounts approve. It moves an account's tokens
 ///         to the settlement contract when, and only when, the settlement
@@ -57,8 +65,11 @@ contract Collector {
 ///              price the batch's own market trade achieved, measured from
 ///              balances, never reported by the caller. A token appears at
 ///              most once in a batch.
-///           4. That price must sit within a fixed band of a public price
-///              feed that is fresh. Otherwise the batch is undone.
+///           4. That price must sit within a narrow band of a quote the
+///              token's issuer signed for it seconds ago: the price at which
+///              the issuer itself stands ready to trade right now. The quote
+///              in turn must sit within a wider band of the issuer's slower
+///              public price feed. Otherwise the batch is undone.
 ///           5. What a fund gives up is paid for in full, in the same
 ///              transaction.
 ///           6. A fund's traded value is capped by an allowance that holds
@@ -82,6 +93,19 @@ contract Settlement {
         uint256 quantity; // stock tokens
     }
 
+    /// @dev The issuer's signed quote, field for field as the issuer signs it.
+    struct Quote {
+        uint256 chainId;
+        uint256 attestationId;
+        bytes32 userId;
+        address asset;
+        uint256 price; // dollars per whole token, scaled by 1e18
+        uint256 quantity;
+        uint256 expiration;
+        uint8 side; // 0: the issuer sells the token. 1: the issuer buys it.
+        bytes32 additionalData;
+    }
+
     /// @dev One token's trades. `netQuantity` is what the market leg trades:
     ///      buys minus sells when `netBuy`, sells minus buys otherwise. It
     ///      must be more than zero, so every batch has a real market price.
@@ -96,6 +120,11 @@ contract Settlement {
         bytes routerCall;
         Fill[] buys;
         Fill[] sells;
+        /// The issuer's live quote for the token, and its signature. A
+        /// quote where the issuer sells when the market leg buys, and one
+        /// where it buys when the market leg sells.
+        Quote quote;
+        bytes quoteSignature;
     }
 
     struct Account {
@@ -106,7 +135,8 @@ contract Settlement {
         uint256 limitLeft;
     }
 
-    /// @dev What the public feed allows for one token right now.
+    /// @dev For one token right now: the feed price fills are valued at, and
+    ///      the lowest and highest batch price the issuer's quote allows.
     struct Band {
         uint256 feed;
         uint256 lowest;
@@ -129,6 +159,10 @@ contract Settlement {
     error EmptyFill();
     error PriceUnavailable(address token);
     error PriceOutOfBand(uint256 price, uint256 lowest, uint256 highest);
+    error QuoteMismatch(address token);
+    error QuoteNotLive(uint256 expiration);
+    error QuoteNotSigned();
+    error QuoteOutOfBand(uint256 quoted, uint256 feed);
     error MarketLegShort(uint256 expected, uint256 got);
     error LeftShort(address token, uint256 before, uint256 afterwards);
     error TokenCallFailed(address token);
@@ -147,6 +181,14 @@ contract Settlement {
 
     uint256 private constant ONE = 1e18;
     uint256 private constant BPS = 10_000;
+    bytes32 private constant QUOTE_TYPEHASH = keccak256(
+        "Quote(uint256 chainId,uint256 attestationId,bytes32 userId,address asset,uint256 price,uint256 quantity,uint256 expiration,uint8 side,bytes32 additionalData)"
+    );
+    bytes32 private constant QUOTE_SIGNER_ROLE = keccak256("ATTESTATION_SIGNER_ROLE");
+    /// @dev Half the order of the signature curve. A signature above it has a
+    ///      twin below it, and only the lower one counts.
+    uint256 private constant HALF_ORDER =
+        ((uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE) << 128) | 0xBAAEDCE6AF48A03BBFD25E8CD0364141) / 2;
     /// @notice A target share of this much is the whole fund.
     uint256 public constant WHOLE = 1_000_000_000;
     uint256 public constant MAX_TOKENS = 32;
@@ -155,10 +197,16 @@ contract Settlement {
 
     address public immutable cash;
     IPriceFeed public immutable priceFeed;
+    IIssuer public immutable issuer;
     Collector public immutable collector;
-    /// @notice How far the batch price may sit from the feed price, in basis points.
+    /// @notice How far the batch price may sit from the issuer's quote, in basis points.
+    uint256 public immutable quoteBandBps;
+    /// @notice The furthest ahead a quote may expire, in seconds. The issuer's
+    ///         quotes live for seconds, so one dated further ahead is not one of them.
+    uint256 public immutable maxQuoteLife;
+    /// @notice How far the issuer's quote may sit from the feed price, in basis points.
     uint256 public immutable maxDeviationBps;
-    /// @notice The oldest feed price a batch may rely on, in seconds.
+    /// @notice The oldest feed price a fund may be valued at, in seconds.
     uint256 public immutable maxPriceAge;
     /// @notice Can stop the operator or a route at once and appoint new ones after `DELAY`.
     address public immutable admin;
@@ -193,18 +241,24 @@ contract Settlement {
     constructor(
         address cash_,
         address priceFeed_,
+        address issuer_,
         address admin_,
         address operator_,
+        uint256 quoteBandBps_,
+        uint256 maxQuoteLife_,
         uint256 maxDeviationBps_,
         uint256 maxPriceAge_
     ) {
-        if (cash_ == address(0) || priceFeed_ == address(0) || admin_ == address(0) || operator_ == address(0)) {
-            revert ZeroAddress();
-        }
-        if (maxDeviationBps_ == 0 || maxDeviationBps_ >= BPS || maxPriceAge_ == 0) revert BadConfig();
+        if (cash_ == address(0) || priceFeed_ == address(0) || issuer_ == address(0)) revert ZeroAddress();
+        if (admin_ == address(0) || operator_ == address(0)) revert ZeroAddress();
+        if (quoteBandBps_ == 0 || quoteBandBps_ > maxDeviationBps_ || maxDeviationBps_ >= BPS) revert BadConfig();
+        if (maxQuoteLife_ == 0 || maxPriceAge_ == 0) revert BadConfig();
         _requireEighteenDecimals(cash_);
         cash = cash_;
         priceFeed = IPriceFeed(priceFeed_);
+        issuer = IIssuer(issuer_);
+        quoteBandBps = quoteBandBps_;
+        maxQuoteLife = maxQuoteLife_;
         admin = admin_;
         operator = operator_;
         maxDeviationBps = maxDeviationBps_;
@@ -343,7 +397,7 @@ contract Settlement {
         if (token == cash || trade.netQuantity == 0) revert NetQuantityMismatch(0, trade.netQuantity);
         if (!isRouter[trade.router] || trade.router == token) revert RouterNotAllowed(trade.router);
         _onceThisBatch(token);
-        Band memory band = _band(token);
+        Band memory band = _band(trade);
         uint256 tokenBefore = IERC20(token).balanceOf(address(this));
 
         uint256 sold;
@@ -553,10 +607,38 @@ contract Settlement {
         }
     }
 
-    function _band(address token) private view returns (Band memory band) {
-        band.feed = _feedPrice(token);
-        band.lowest = (band.feed * (BPS - maxDeviationBps)) / BPS;
-        band.highest = (band.feed * (BPS + maxDeviationBps)) / BPS;
+    /// @dev The batch price is held to the issuer's quote, and the quote to
+    ///      the slower feed. The feed alone is too stale to price a trade,
+    ///      but it bounds what a stolen quote-signing key could do.
+    function _band(Trade calldata trade) private view returns (Band memory band) {
+        band.feed = _feedPrice(trade.token);
+        uint256 quoted = _quotedPrice(trade);
+        if (quoted * BPS < band.feed * (BPS - maxDeviationBps) || quoted * BPS > band.feed * (BPS + maxDeviationBps)) {
+            revert QuoteOutOfBand(quoted, band.feed);
+        }
+        band.lowest = (quoted * (BPS - quoteBandBps)) / BPS;
+        band.highest = (quoted * (BPS + quoteBandBps)) / BPS;
+    }
+
+    /// @dev The price in the trade's quote, once the quote is shown to be the
+    ///      issuer's own, for this token, this direction and this moment.
+    function _quotedPrice(Trade calldata trade) private view returns (uint256) {
+        Quote calldata quote = trade.quote;
+        // A batch that buys is held to what the issuer sells at, and one that sells to what it buys at.
+        if (quote.asset != trade.token || quote.chainId != block.chainid || quote.side != (trade.netBuy ? 0 : 1)) {
+            revert QuoteMismatch(trade.token);
+        }
+        if (block.timestamp > quote.expiration || quote.expiration - block.timestamp > maxQuoteLife) {
+            revert QuoteNotLive(quote.expiration);
+        }
+        bytes calldata signature = trade.quoteSignature;
+        if (signature.length != 65 || uint256(bytes32(signature[32:64])) > HALF_ORDER) revert QuoteNotSigned();
+        bytes32 digest =
+            keccak256(abi.encodePacked("\x19\x01", issuer.getDomainSeparator(), keccak256(abi.encode(QUOTE_TYPEHASH, quote))));
+        address signer = ecrecover(digest, uint8(signature[64]), bytes32(signature[0:32]), bytes32(signature[32:64]));
+        // Whoever the issuer lets sign today. A change of key on its side needs nothing here.
+        if (signer == address(0) || !issuer.hasRole(QUOTE_SIGNER_ROLE, signer)) revert QuoteNotSigned();
+        return quote.price;
     }
 
     // ---- arithmetic and token calls ----

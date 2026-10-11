@@ -2,7 +2,7 @@
 pragma solidity 0.8.24;
 
 import {Test} from "forge-std/Test.sol";
-import {Settlement, Collector, IPriceFeed} from "../src/Settlement.sol";
+import {Settlement, Collector, IPriceFeed, IIssuer} from "../src/Settlement.sol";
 
 contract MockToken {
     uint8 public decimals;
@@ -52,6 +52,20 @@ contract MockFeed is IPriceFeed {
     }
 }
 
+/// @dev The issuer, as far as naming who may sign its quotes.
+contract MockIssuer is IIssuer {
+    bytes32 public constant getDomainSeparator = keccak256("a test issuer");
+    mapping(address => bool) public signers;
+
+    function setSigner(address who, bool allowed) external {
+        signers[who] = allowed;
+    }
+
+    function hasRole(bytes32 role, address who) external view returns (bool) {
+        return role == keccak256("ATTESTATION_SIGNER_ROLE") && signers[who];
+    }
+}
+
 /// @dev A market that fills at whatever amounts the call names. It pulls
 ///      `amountIn` from its caller and pays `amountOut` to `recipient`.
 contract MockRouter {
@@ -84,6 +98,7 @@ contract SettlementTest is Test {
     MockToken nvda;
     MockToken amzn;
     MockFeed feed;
+    MockIssuer issuer;
     MockRouter router;
     Settlement settlement;
     Collector collector;
@@ -94,6 +109,8 @@ contract SettlementTest is Test {
     address alice = makeAddr("alice"); // wants more of both: targets 40% and 30%
     address bob = makeAddr("bob"); // wants less of both: targets 10% and 10%
     address carol = makeAddr("carol"); // wants more of both, like alice
+    uint256 issuerKey = uint256(keccak256("the issuer's quote signer"));
+    uint256 nextQuote = 1;
 
     function setUp() public {
         vm.warp(1_800_000_000);
@@ -101,9 +118,12 @@ contract SettlementTest is Test {
         nvda = new MockToken(18);
         amzn = new MockToken(18);
         feed = new MockFeed();
+        issuer = new MockIssuer();
+        issuer.setSigner(vm.addr(issuerKey), true);
         router = new MockRouter();
-        // Batch prices within 1% of a feed price no older than 12 hours.
-        settlement = new Settlement(address(cash), address(feed), admin, operator, 100, 12 hours);
+        // Batch prices within 1% of an issuer quote that expires within a minute. The
+        // quote within 5% of a feed price no older than 12 hours.
+        settlement = new Settlement(address(cash), address(feed), address(issuer), admin, operator, 100, 60, 500, 12 hours);
         collector = settlement.collector();
         vm.prank(admin);
         settlement.proposeRouter(address(router));
@@ -168,24 +188,57 @@ contract SettlementTest is Test {
         return a == 0 ? 0 : (a - 1) / b + 1;
     }
 
-    /// A batch whose market leg buys `net` tokens for exactly `spend` cash.
-    function _netBuy(MockToken token, uint256 net, uint256 spend, Settlement.Fill[] memory buys, Settlement.Fill[] memory sells)
-        private
-        view
-        returns (Settlement.Trade memory)
-    {
-        bytes memory call = abi.encodeCall(MockRouter.swap, (cash, token, spend, net, address(settlement)));
-        return Settlement.Trade(address(token), true, net, spend, address(router), call, buys, sells);
+    function _sign(Settlement.Quote memory quote, uint256 key) private view returns (bytes memory) {
+        bytes32 typeHash = keccak256(
+            "Quote(uint256 chainId,uint256 attestationId,bytes32 userId,address asset,uint256 price,uint256 quantity,uint256 expiration,uint8 side,bytes32 additionalData)"
+        );
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", issuer.getDomainSeparator(), keccak256(abi.encode(typeHash, quote))));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(key, digest);
+        return abi.encodePacked(r, s, v);
     }
 
-    /// A batch whose market leg sells `net` tokens for exactly `proceeds` cash.
+    /// Price a trade against a fresh issuer quote at `price`.
+    function _requote(Settlement.Trade memory trade, uint256 price) private {
+        trade.quote = Settlement.Quote(
+            block.chainid, nextQuote++, "the route", trade.token, price, trade.netQuantity, block.timestamp + 15, trade.netBuy ? 0 : 1, 0
+        );
+        trade.quoteSignature = _sign(trade.quote, issuerKey);
+    }
+
+    /// The market leg: a swap of `amountIn` for `amountOut`, paid to the settlement contract.
+    function _swap(MockToken tokenIn, MockToken tokenOut, uint256 amountIn, uint256 amountOut) private view returns (bytes memory) {
+        return abi.encodeCall(MockRouter.swap, (tokenIn, tokenOut, amountIn, amountOut, address(settlement)));
+    }
+
+    /// A batch whose market leg buys `net` tokens for exactly `spend` cash, on an issuer quote at the feed price.
+    function _netBuy(MockToken token, uint256 net, uint256 spend, Settlement.Fill[] memory buys, Settlement.Fill[] memory sells)
+        private
+        returns (Settlement.Trade memory trade)
+    {
+        trade.token = address(token);
+        trade.netBuy = true;
+        trade.netQuantity = net;
+        trade.cashLimit = spend;
+        trade.router = address(router);
+        trade.buys = buys;
+        trade.sells = sells;
+        _requote(trade, feed.price(address(token)));
+        trade.routerCall = _swap(cash, token, spend, net);
+    }
+
+    /// A batch whose market leg sells `net` tokens for exactly `proceeds` cash, on an issuer quote at the feed price.
     function _netSell(MockToken token, uint256 net, uint256 proceeds, Settlement.Fill[] memory buys, Settlement.Fill[] memory sells)
         private
-        view
-        returns (Settlement.Trade memory)
+        returns (Settlement.Trade memory trade)
     {
-        bytes memory call = abi.encodeCall(MockRouter.swap, (token, cash, net, proceeds, address(settlement)));
-        return Settlement.Trade(address(token), false, net, proceeds, address(router), call, buys, sells);
+        trade.token = address(token);
+        trade.netQuantity = net;
+        trade.cashLimit = proceeds;
+        trade.router = address(router);
+        trade.buys = buys;
+        trade.sells = sells;
+        _requote(trade, feed.price(address(token)));
+        trade.routerCall = _swap(token, cash, net, proceeds);
     }
 
     function _settle(Settlement.Trade memory trade) private {
@@ -260,19 +313,21 @@ contract SettlementTest is Test {
 
     function test_buyersPayWhatTheMarketCharged_notTheLimit() public {
         // The caller allowed up to 251 a token; the market filled at 249.
-        bytes memory call = abi.encodeCall(MockRouter.swap, (cash, nvda, 498e18, 2e18, address(settlement)));
-        _settle(Settlement.Trade(address(nvda), true, 2e18, 502e18, address(router), call, _fills(alice, 2e18), _none()));
+        Settlement.Trade memory trade = _netBuy(nvda, 2e18, 502e18, _fills(alice, 2e18), _none());
+        trade.routerCall = _swap(cash, nvda, 498e18, 2e18);
+        _settle(trade);
         assertEq(cash.balanceOf(alice), START_CASH - 498e18, "the unused part of the limit was not refunded");
         _assertHoldsNothing();
     }
 
     function test_aBetterFillThanAskedIsSharedByTheBuyers() public {
         // The route promised 2 tokens for 500 and delivers 2.01.
-        bytes memory call = abi.encodeCall(MockRouter.swap, (cash, nvda, 500e18, 2.01e18, address(settlement)));
         Settlement.Fill[] memory buys = new Settlement.Fill[](2);
         buys[0] = Settlement.Fill(alice, 1.5e18);
         buys[1] = Settlement.Fill(carol, 0.5e18);
-        _settle(Settlement.Trade(address(nvda), true, 2e18, 500e18, address(router), call, buys, _none()));
+        Settlement.Trade memory trade = _netBuy(nvda, 2e18, 500e18, buys, _none());
+        trade.routerCall = _swap(cash, nvda, 500e18, 2.01e18);
+        _settle(trade);
         assertEq(nvda.balanceOf(alice), START_STOCK + 1.5e18 + 0.0075e18);
         assertEq(nvda.balanceOf(carol), START_STOCK + 0.5e18 + 0.0025e18);
         assertEq(cash.balanceOf(alice), START_CASH - 375e18);
@@ -283,8 +338,9 @@ contract SettlementTest is Test {
     function test_aMatchedSellerGetsThePriceTheMarketGave_notTheWorstAllowed() public {
         // The route promised at least 2 tokens for 502 and delivers 2.008: a price of 250.
         // Bob, matched against Alice, is paid 250 a token, not the 251 the route allowed for.
-        bytes memory call = abi.encodeCall(MockRouter.swap, (cash, nvda, 502e18, 2.008e18, address(settlement)));
-        _settle(Settlement.Trade(address(nvda), true, 2e18, 502e18, address(router), call, _fills(alice, 3e18), _fills(bob, 1e18)));
+        Settlement.Trade memory trade = _netBuy(nvda, 2e18, 502e18, _fills(alice, 3e18), _fills(bob, 1e18));
+        trade.routerCall = _swap(cash, nvda, 502e18, 2.008e18);
+        _settle(trade);
         assertEq(cash.balanceOf(bob), START_CASH + 250e18, "the seller was paid something other than the market price");
         assertEq(nvda.balanceOf(alice), START_STOCK + 3.008e18);
         assertEq(cash.balanceOf(alice), START_CASH - 752e18, "the buyer paid something other than the market's cash plus the seller's");
@@ -388,9 +444,8 @@ contract SettlementTest is Test {
 
     function test_aBetterFillThanAskedCannotPushABuyerPastItsTarget() public {
         // Alice asks for exactly the 52 tokens she has room for; the market delivers 52.1.
-        bytes memory call = abi.encodeCall(MockRouter.swap, (cash, nvda, 13_000e18, 52.1e18, address(settlement)));
-        Settlement.Trade memory trade =
-            Settlement.Trade(address(nvda), true, 52e18, 13_000e18, address(router), call, _fills(alice, 52e18), _none());
+        Settlement.Trade memory trade = _netBuy(nvda, 52e18, 13_000e18, _fills(alice, 52e18), _none());
+        trade.routerCall = _swap(cash, nvda, 13_000e18, 52.1e18);
         vm.expectRevert(abi.encodeWithSelector(Settlement.PastTarget.selector, alice, address(nvda), 38_025e18, 38_000e18));
         _settle(trade);
     }
@@ -457,8 +512,9 @@ contract SettlementTest is Test {
 
     function test_roomForSlippageDoesNotCountAgainstTheBand() public {
         // The caller allows up to 255 a token, above the band, but the market charges 252.
-        bytes memory call = abi.encodeCall(MockRouter.swap, (cash, nvda, 504e18, 2e18, address(settlement)));
-        _settle(Settlement.Trade(address(nvda), true, 2e18, 510e18, address(router), call, _fills(alice, 2e18), _none()));
+        Settlement.Trade memory trade = _netBuy(nvda, 2e18, 510e18, _fills(alice, 2e18), _none());
+        trade.routerCall = _swap(cash, nvda, 504e18, 2e18);
+        _settle(trade);
         assertEq(cash.balanceOf(alice), START_CASH - 504e18);
         _assertHoldsNothing();
     }
@@ -513,19 +569,147 @@ contract SettlementTest is Test {
         _settle(trade);
     }
 
+    // ---- the price is held to the issuer's own quote ----
+
+    function test_theBatchPriceIsHeldToTheQuote_notTheSlowFeed() public {
+        // The feed still says 250, but the issuer now quotes 255. A fill at 255 is honest.
+        Settlement.Trade memory trade = _netBuy(nvda, 2e18, 510e18, _fills(alice, 2e18), _none());
+        _requote(trade, 255e18);
+        trade.routerCall = _swap(cash, nvda, 510e18, 2e18);
+        _settle(trade);
+        assertEq(cash.balanceOf(alice), START_CASH - 510e18);
+
+        // A fill at the feed's 250 is now 2% from the quote, and is undone.
+        Settlement.Trade memory cheap = _netBuy(nvda, 2e18, 500e18, _fills(alice, 3e18), _fills(bob, 1e18));
+        _requote(cheap, 255e18);
+        cheap.routerCall = _swap(cash, nvda, 500e18, 2e18);
+        vm.expectRevert(abi.encodeWithSelector(Settlement.PriceOutOfBand.selector, 250e18, 252.45e18, 257.55e18));
+        _settle(cheap);
+    }
+
+    function test_aQuoteFarFromTheFeedIsRefused() public {
+        // 5% above the feed's 250 is 262.50.
+        Settlement.Trade memory trade = _netBuy(nvda, 2e18, 530e18, _fills(alice, 2e18), _none());
+        _requote(trade, 265e18);
+        trade.routerCall = _swap(cash, nvda, 530e18, 2e18);
+        vm.expectRevert(abi.encodeWithSelector(Settlement.QuoteOutOfBand.selector, 265e18, 250e18));
+        _settle(trade);
+        _assertUntouched(alice);
+    }
+
+    function test_aQuoteTheIssuerDidNotSignIsRefused() public {
+        Settlement.Trade memory trade = _netBuy(nvda, 2e18, 500e18, _fills(alice, 2e18), _none());
+        trade.quoteSignature = _sign(trade.quote, uint256(keccak256("somebody else")));
+        vm.expectRevert(Settlement.QuoteNotSigned.selector);
+        _settle(trade);
+
+        // A real signature does not cover a quote changed afterwards.
+        trade.quoteSignature = _sign(trade.quote, issuerKey);
+        trade.quote.price = 249e18;
+        vm.expectRevert(Settlement.QuoteNotSigned.selector);
+        _settle(trade);
+
+        trade.quote.price = 250e18;
+        trade.quoteSignature = bytes.concat(trade.quoteSignature, hex"00");
+        vm.expectRevert(Settlement.QuoteNotSigned.selector);
+        _settle(trade);
+        _assertUntouched(alice);
+    }
+
+    function test_onlyOneFormOfASignatureCounts() public {
+        Settlement.Trade memory trade = _netBuy(nvda, 2e18, 500e18, _fills(alice, 2e18), _none());
+        bytes memory signature = trade.quoteSignature;
+        bytes32 r;
+        bytes32 s;
+        uint8 v;
+        assembly {
+            r := mload(add(signature, 32))
+            s := mload(add(signature, 64))
+            v := byte(0, mload(add(signature, 96)))
+        }
+        // The same signature mirrored: equally valid to the curve, refused here.
+        uint256 order = (uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE) << 128) | 0xBAAEDCE6AF48A03BBFD25E8CD0364141;
+        trade.quoteSignature = abi.encodePacked(r, bytes32(order - uint256(s)), v == 27 ? uint8(28) : uint8(27));
+        vm.expectRevert(Settlement.QuoteNotSigned.selector);
+        _settle(trade);
+    }
+
+    function test_aSignerTheIssuerDroppedNoLongerCounts() public {
+        Settlement.Trade memory trade = _netBuy(nvda, 2e18, 500e18, _fills(alice, 2e18), _none());
+        issuer.setSigner(vm.addr(issuerKey), false);
+        vm.expectRevert(Settlement.QuoteNotSigned.selector);
+        _settle(trade);
+    }
+
+    function test_aQuoteForAnotherTokenDirectionOrChainIsRefused() public {
+        Settlement.Trade memory trade = _netBuy(nvda, 2e18, 500e18, _fills(alice, 2e18), _none());
+        trade.quote.asset = address(amzn);
+        trade.quoteSignature = _sign(trade.quote, issuerKey);
+        vm.expectRevert(abi.encodeWithSelector(Settlement.QuoteMismatch.selector, address(nvda)));
+        _settle(trade);
+
+        // A quote at which the issuer buys cannot price a batch that buys from it.
+        trade.quote.asset = address(nvda);
+        trade.quote.side = 1;
+        trade.quoteSignature = _sign(trade.quote, issuerKey);
+        vm.expectRevert(abi.encodeWithSelector(Settlement.QuoteMismatch.selector, address(nvda)));
+        _settle(trade);
+
+        trade.quote.side = 0;
+        trade.quote.chainId = block.chainid + 1;
+        trade.quoteSignature = _sign(trade.quote, issuerKey);
+        vm.expectRevert(abi.encodeWithSelector(Settlement.QuoteMismatch.selector, address(nvda)));
+        _settle(trade);
+    }
+
+    function test_aQuoteMustBeLive() public {
+        Settlement.Trade memory trade = _netBuy(nvda, 2e18, 500e18, _fills(alice, 2e18), _none());
+        uint256 expiration = trade.quote.expiration;
+        vm.warp(expiration + 1);
+        vm.expectRevert(abi.encodeWithSelector(Settlement.QuoteNotLive.selector, expiration));
+        _settle(trade);
+
+        // Nor may one be dated far ahead, to be kept for a better moment.
+        Settlement.Trade memory early = _netBuy(nvda, 2e18, 500e18, _fills(alice, 2e18), _none());
+        early.quote.expiration = block.timestamp + 61;
+        early.quoteSignature = _sign(early.quote, issuerKey);
+        vm.expectRevert(abi.encodeWithSelector(Settlement.QuoteNotLive.selector, block.timestamp + 61));
+        _settle(early);
+    }
+
+    function test_aSellingBatchIsHeldToAQuoteAtWhichTheIssuerBuys() public {
+        Settlement.Trade memory trade = _netSell(nvda, 2e18, 496e18, _none(), _fills(bob, 2e18));
+        _requote(trade, 246e18);
+        trade.routerCall = _swap(nvda, cash, 2e18, 496e18);
+        // 248 a token is 0.8% above the quote of 246: inside the band.
+        _settle(trade);
+        assertEq(cash.balanceOf(bob), START_CASH + 496e18);
+
+        Settlement.Trade memory low = _netSell(nvda, 2e18, 486e18, _none(), _fills(bob, 2e18));
+        _requote(low, 246e18);
+        low.routerCall = _swap(nvda, cash, 2e18, 486e18);
+        vm.expectRevert(abi.encodeWithSelector(Settlement.PriceOutOfBand.selector, 243e18, 243.54e18, 248.46e18));
+        _settle(low);
+    }
+
+    function test_theQuoteBandCannotBeWiderThanTheFeedBand() public {
+        vm.expectRevert(Settlement.BadConfig.selector);
+        new Settlement(address(cash), address(feed), address(issuer), admin, operator, 600, 60, 500, 12 hours);
+    }
+
     // ---- a route cannot take anything ----
 
     function test_aRouteThatDeliversNothingIsUndone() public {
-        bytes memory call = abi.encodeCall(MockRouter.swap, (cash, nvda, 500e18, 0, address(settlement)));
-        Settlement.Trade memory trade = Settlement.Trade(address(nvda), true, 2e18, 500e18, address(router), call, _fills(alice, 2e18), _none());
+        Settlement.Trade memory trade = _netBuy(nvda, 2e18, 500e18, _fills(alice, 2e18), _none());
+        trade.routerCall = _swap(cash, nvda, 500e18, 0);
         vm.expectRevert(abi.encodeWithSelector(Settlement.MarketLegShort.selector, 2e18, 0));
         _settle(trade);
         _assertUntouched(alice);
     }
 
     function test_aRouteThatPaysSomeoneElseIsUndone() public {
-        bytes memory call = abi.encodeCall(MockRouter.swap, (cash, nvda, 500e18, 2e18, makeAddr("thief")));
-        Settlement.Trade memory trade = Settlement.Trade(address(nvda), true, 2e18, 500e18, address(router), call, _fills(alice, 2e18), _none());
+        Settlement.Trade memory trade = _netBuy(nvda, 2e18, 500e18, _fills(alice, 2e18), _none());
+        trade.routerCall = abi.encodeCall(MockRouter.swap, (cash, nvda, 500e18, 2e18, makeAddr("thief")));
         vm.expectRevert(abi.encodeWithSelector(Settlement.MarketLegShort.selector, 2e18, 0));
         _settle(trade);
         _assertUntouched(alice);
@@ -533,16 +717,16 @@ contract SettlementTest is Test {
 
     function test_aRouteCannotSpendAFundsApproval() public {
         // Bob approved the collector, not the settlement contract or any route.
-        bytes memory call = abi.encodeCall(MockRouter.raid, (cash, bob, makeAddr("thief"), 1_000e18));
-        Settlement.Trade memory trade = Settlement.Trade(address(nvda), true, 2e18, 500e18, address(router), call, _fills(alice, 2e18), _none());
+        Settlement.Trade memory trade = _netBuy(nvda, 2e18, 500e18, _fills(alice, 2e18), _none());
+        trade.routerCall = abi.encodeCall(MockRouter.raid, (cash, bob, makeAddr("thief"), 1_000e18));
         vm.expectRevert();
         _settle(trade);
         _assertUntouched(bob);
     }
 
     function test_aRouteCannotUseTheCollector() public {
-        bytes memory call = abi.encodeCall(MockRouter.raidCollector, (collector, address(cash), bob, 1_000e18));
-        Settlement.Trade memory trade = Settlement.Trade(address(nvda), true, 2e18, 500e18, address(router), call, _fills(alice, 2e18), _none());
+        Settlement.Trade memory trade = _netBuy(nvda, 2e18, 500e18, _fills(alice, 2e18), _none());
+        trade.routerCall = abi.encodeCall(MockRouter.raidCollector, (collector, address(cash), bob, 1_000e18));
         vm.expectRevert(Collector.NotSettlement.selector);
         _settle(trade);
         _assertUntouched(bob);
@@ -556,8 +740,8 @@ contract SettlementTest is Test {
 
     function test_anUnapprovedRouteIsRefused() public {
         MockRouter other = new MockRouter();
-        bytes memory call = abi.encodeCall(MockRouter.swap, (cash, nvda, 500e18, 2e18, address(settlement)));
-        Settlement.Trade memory trade = Settlement.Trade(address(nvda), true, 2e18, 500e18, address(other), call, _fills(alice, 2e18), _none());
+        Settlement.Trade memory trade = _netBuy(nvda, 2e18, 500e18, _fills(alice, 2e18), _none());
+        trade.router = address(other);
         vm.expectRevert(abi.encodeWithSelector(Settlement.RouterNotAllowed.selector, address(other)));
         _settle(trade);
     }
@@ -578,8 +762,9 @@ contract SettlementTest is Test {
         settlement.proposeRouter(address(nvda));
         vm.warp(block.timestamp + 2 days);
         settlement.activateRouter(address(nvda));
-        bytes memory call = abi.encodeCall(MockToken.transfer, (makeAddr("thief"), 1e18));
-        Settlement.Trade memory trade = Settlement.Trade(address(nvda), false, 1e18, 250e18, address(nvda), call, _none(), _fills(bob, 1e18));
+        Settlement.Trade memory trade = _netSell(nvda, 1e18, 250e18, _none(), _fills(bob, 1e18));
+        trade.router = address(nvda);
+        trade.routerCall = abi.encodeCall(MockToken.transfer, (makeAddr("thief"), 1e18));
         vm.expectRevert(abi.encodeWithSelector(Settlement.RouterNotAllowed.selector, address(nvda)));
         _settle(trade);
     }
