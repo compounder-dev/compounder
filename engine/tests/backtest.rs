@@ -184,6 +184,14 @@ fn a_run_starts_and_ends_where_prices_allow_and_says_which_asset_held_it() {
     let plain = ran(&daily(equal(vec![asset("YOUNG"), asset("OLD")])), &history, &free(1_000.0));
     assert_eq!(plain.first_day, days[10]);
     assert_eq!(plain.warnings.iter().map(|warning| warning.message.as_str()).collect::<Vec<_>>(), ["YOUNG has no price before 2025-03-17, so the run cannot start before then."]);
+
+    // With no days asked for, the run takes what the prices allow and names only the assets that set its two ends:
+    // YOUNG and GONE here. OLD's own five day window is filled long before and moved nothing.
+    let whole = ran(&strategy, &history, &free(1_000.0));
+    assert_eq!((whole.first_day, whole.last_day), (days[15], days[24]));
+    assert_eq!(whole.warnings.iter().map(|warning| (warning.code, warning.asset.clone(), warning.day)).collect::<Vec<_>>(), [(WarningCode::LateStart, listed("YOUNG"), days[15]), (WarningCode::EarlyEnd, listed("GONE"), days[24])]);
+    // Assets as old as the calendar, with no reading on them, move nothing and say nothing.
+    assert!(ran(&daily(equal(vec![asset("OLD")])), &history, &free(1_000.0)).warnings.is_empty());
 }
 
 #[test]

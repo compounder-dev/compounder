@@ -292,3 +292,22 @@ fn a_token_is_evaluated_on_the_series_it_is_given() {
     assert_eq!(evaluator.on(days[1]).unwrap().weights, [1.0, 0.0]);
     assert_eq!(evaluator.on(days[2]).unwrap().weights, [0.0, 1.0]);
 }
+
+#[test]
+fn the_days_a_run_would_cover_can_be_asked_without_running_it() {
+    let (days, history) = four();
+    let strategy = daily(filter(RETURN_2, Take::Top, 1, vec![asset("AAA"), asset("BBB")]));
+    let evaluator = Evaluator::new(&strategy, &history, false).unwrap();
+    // Asked for everything, it gets what the readings allow, and is told which assets held it back.
+    let whole = evaluator.window(None, None).unwrap();
+    assert_eq!((whole.first, whole.last), (days[2], days[5]));
+    assert_eq!(whole.warnings.iter().map(|warning| (warning.asset.clone(), warning.day)).collect::<Vec<_>>(), [(listed("AAA"), days[2]), (listed("BBB"), days[2])]);
+    // A start on a Saturday moves to the Monday. An end on a Sunday moves back to the Friday.
+    let weekend = evaluator.window(Some("2025-03-08".parse().unwrap()), None).unwrap();
+    assert_eq!((weekend.first, weekend.last, weekend.warnings.len()), (days[5], days[5], 0));
+    let friday = evaluator.window(Some(days[3]), Some("2025-03-09".parse().unwrap())).unwrap();
+    assert_eq!((friday.first, friday.last, friday.warnings.len()), (days[3], days[4], 0));
+    // The closes of the assets it may hold, in their order. A closed day has none.
+    assert_eq!(evaluator.closes(days[3]), Some(vec![104.0, 48.0]));
+    assert_eq!(evaluator.closes("2025-03-08".parse().unwrap()), None);
+}

@@ -8,8 +8,9 @@
 //!
 //! Each asset that is not ready on the day asked for gives one warning with
 //! the day it is ready, and each asset whose prices stop before the day
-//! asked for gives one with its last day. With no day asked for, the ends of
-//! the calendar stand for it.
+//! asked for gives one with its last day. A run with no day asked for takes
+//! what the prices allow, and the warning then names the asset or assets
+//! that set that day: without them the run would have been longer.
 
 use super::Evaluator;
 use crate::rules::{Asset, Issue, IssueCode};
@@ -89,9 +90,14 @@ impl Evaluator<'_> {
 
         let mut warnings = Vec::new();
         let assets = || self.plan.assets.iter().zip(&self.prices).zip(&self.waits);
-        for ((asset, prices), wait) in assets().filter(|(_, wait)| **wait > asked_first as i64) {
+        let held_back = |wait: i64| match start {
+            Some(_) => wait > asked_first as i64,
+            None => wait == self.ready && wait > 0,
+        };
+        for ((asset, prices), wait) in assets().filter(|(_, wait)| held_back(**wait)) {
             // No wait is later than the first day, which is on the calendar.
-            let (day, begins) = (calendar.day(*wait as usize), calendar.day(prices.range().start));
+            let Some(day) = calendar.days().get(*wait as usize).copied() else { continue };
+            let begins = calendar.day(prices.range().start);
             let message = if day == begins {
                 format!("{} has no price before {begins}, so the run cannot start before then.", name(asset))
             } else {
@@ -99,7 +105,11 @@ impl Evaluator<'_> {
             };
             warnings.push(Warning { code: WarningCode::LateStart, asset: asset.clone(), day, message });
         }
-        for ((asset, prices), _) in assets().filter(|((_, prices), _)| prices.range().end - 1 < asked_last) {
+        let cut_short = |ends: usize| match end {
+            Some(_) => ends < asked_last,
+            None => ends == self.last && ends < asked_last,
+        };
+        for ((asset, prices), _) in assets().filter(|((_, prices), _)| cut_short(prices.range().end - 1)) {
             let day = calendar.day(prices.range().end - 1);
             let message = format!("{} has no price after {day}, so the run cannot go on past then.", name(asset));
             warnings.push(Warning { code: WarningCode::EarlyEnd, asset: asset.clone(), day, message });

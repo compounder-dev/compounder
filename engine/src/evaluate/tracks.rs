@@ -23,17 +23,18 @@ use super::weigh::{Ground, Memo, Weights};
 use crate::indicator::Running;
 use compounder_prices::calendar::Aligned;
 
-/// A run of daily values. `start` is the calendar position of the first.
-pub(crate) struct Run {
+/// A value for each trading day of a stretch. `start` is the calendar
+/// position of the first.
+pub(crate) struct Daily {
     pub start: usize,
     pub values: Vec<f64>,
 }
 
 pub(crate) struct Tracks {
     /// The own series of each block some measure reads, by block.
-    pub levels: Vec<Option<Run>>,
+    pub levels: Vec<Option<Daily>>,
     /// The values of each carried measure from its first one on, by measure.
-    pub carried: Vec<Option<Run>>,
+    pub carried: Vec<Option<Daily>>,
 }
 
 impl Tracks {
@@ -45,7 +46,7 @@ impl Tracks {
         for (place, measure) in plan.measures.iter().enumerate() {
             if let (true, Subject::Asset(asset)) = (measure.indicator.carries(), measure.subject) {
                 let from = prices[asset].range().start + skip[asset];
-                let mut run = Run { start: from + measure.indicator.first_index(), values: Vec::new() };
+                let mut run = Daily { start: from + measure.indicator.first_index(), values: Vec::new() };
                 if let (Some(mut running), Some(closes)) = (Running::new(measure.indicator), prices[asset].prices().get(skip[asset]..)) {
                     run.values.extend(closes.iter().filter_map(|close| running.push(*close)));
                 }
@@ -59,11 +60,11 @@ impl Tracks {
         let mut walks = Vec::new();
         for (block, measures) in measured.iter().enumerate().filter(|(_, measures)| !measures.is_empty()) {
             let Some(start) = usize::try_from(ready.blocks[block]).ok().filter(|start| *start <= last) else { continue };
-            tracks.levels[block] = Some(Run { start, values: Vec::new() });
+            tracks.levels[block] = Some(Daily { start, values: Vec::new() });
             let mut carried = Vec::new();
             for place in measures {
                 if let Some(running) = Running::new(plan.measures[*place].indicator) {
-                    tracks.carried[*place] = Some(Run { start, values: Vec::new() });
+                    tracks.carried[*place] = Some(Daily { start, values: Vec::new() });
                     carried.push((*place, running));
                 }
             }

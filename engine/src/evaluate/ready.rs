@@ -130,6 +130,47 @@ fn fade(indicator: Indicator) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::rules::{Asset, Comparator, Comparison, Condition, Frequency, Market, Node, Operand, Reading, Rebalance, RuleStrategy, Take, Weighting};
+
+    fn listed(symbol: &str) -> Asset {
+        Asset::Listed { market: Market::Equities, symbol: symbol.to_string() }
+    }
+
+    #[test]
+    fn each_asset_holds_the_tree_back_by_its_start_and_the_longest_run_of_windows_on_it() {
+        let asset = |symbol: &str| Node::Asset(listed(symbol));
+        let reading = |indicator: Indicator, symbol: &str| Reading { indicator, asset: listed(symbol) };
+        // A block that reads a 14 day strength of YOUNG, a pair of MID and OLD, and OLD, ranked by a 20 day return.
+        let strong = Condition::Compare(Comparison { left: reading(Indicator::RelativeStrength { window: 14 }, "YOUNG"), comparator: Comparator::Above, right: Operand::Fixed(0.5) });
+        let switching = Node::If { condition: strong, then: vec![asset("YOUNG")], otherwise: vec![asset("OLD")] };
+        let pair = Node::Weight { name: None, weighting: Weighting::Equal, children: vec![asset("MID"), asset("OLD")] };
+        let ranked = Node::Filter { sort_by: Indicator::CumulativeReturn { window: 20 }, take: Take::Top, count: 1, children: vec![switching, pair, asset("OLD")] };
+        // All of it under a condition on MID's 50 day average.
+        let trend = Condition::Compare(Comparison { left: reading(Indicator::Price, "MID"), comparator: Comparator::Above, right: Operand::Reading(reading(Indicator::AveragePrice { window: 50 }, "MID")) });
+        let root = Node::If { condition: trend, then: vec![ranked], otherwise: vec![asset("OLD")] };
+        let plan = Plan::of(&RuleStrategy { name: "Test".to_string(), rebalance: Rebalance::Calendar(Frequency::Daily), root });
+        assert_eq!(plan.assets, ["MID", "OLD", "YOUNG"].map(listed));
+
+        // MID's first bar is day 100, OLD's day 0 and YOUNG's day 300.
+        let start = [100, 0, 300];
+        // MID: its 50 day average, which is later than a 20 day return on the pair.
+        // OLD: a 20 day return, on itself or on a block that holds it.
+        // YOUNG: 14 closes for the strength, then 20 of the block that reads it.
+        assert_eq!(waits(&plan, &start, &[0, 0, 0]), [100 + 49, 20, 300 + 14 + 20]);
+        let ready = Ready::of(&plan, &start, &[0, 0, 0]);
+        assert_eq!(ready.blocks[plan.root()], 334);
+        // The block that reads YOUNG starts its own series on day 314, and the pair on day 100.
+        let block = |path: &str| ready.blocks[plan.paths.iter().position(|at| at == path).unwrap()];
+        assert_eq!((block("root.then[0].children[0]"), block("root.then[0].children[1]"), block("root.then[0]")), (314, 100, 334));
+
+        // A carried reading that is started late is ready that much later. Readings on a window are not moved.
+        let skip = [7, 7, 5];
+        assert_eq!(waits(&plan, &start, &skip), [149, 20, 339]);
+        assert_eq!(Ready::of(&plan, &start, &skip).blocks[plan.root()], 339);
+        // The strength on YOUNG is the longest thing asked of it: 14 closes and 249 for its seed. MID is asked for 49, OLD for 20.
+        assert_eq!(run_in(&plan, &start, 1_000), [1_000 - 100 - 49, 1_000 - 20, 1_000 - 300 - 263]);
+        assert_eq!(run_in(&plan, &start, 334), [334 - 100 - 49, 334 - 20, 0]);
+    }
 
     #[test]
     fn a_seed_is_given_time_to_fade_and_a_thousand_closes_at_most() {
