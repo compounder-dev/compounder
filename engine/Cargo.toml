@@ -5,6 +5,12 @@ edition = "2021"
 
 [dependencies]
 alloy-primitives = { version = "1", default-features = false, features = ["std"] }
+# Calendar days. Taken without its default features it brings nothing else.
+compounder-prices = { path = "../prices", default-features = false }
+# Logarithms and powers worked out in plain arithmetic. The ones a machine
+# supplies differ in the last digit from one machine to the next, and a
+# statistic must come out the same on the server and in the browser.
+libm = "0.2"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["unbounded_depth"] }
 sha2 = { version = "0.10", default-features = false }

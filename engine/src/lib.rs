@@ -5,4 +5,5 @@
 pub mod batch;
 pub mod rebalance;
 pub mod rules;
+pub mod stats;
 pub mod strategy;

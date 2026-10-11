@@ -1470,6 +1470,8 @@ name = "compounder-engine"
 version = "0.1.0"
 dependencies = [
  "alloy-primitives",
+ "compounder-prices",
+ "libm",
  "serde",
  "serde_json",
  "sha2",
