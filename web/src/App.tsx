@@ -1,5 +1,6 @@
 import { useEffect, useState, type CSSProperties, type MouseEvent } from 'react';
 import { ApiError, chainName, displayName, fetchStarters, hue, percent, ticker, type Holding, type Starter } from './api.ts';
+import { strategyWeights } from './engine.ts';
 
 type Load = { state: 'loading' } | { state: 'failed'; message: string } | { state: 'ready'; starters: Starter[] };
 
@@ -154,7 +155,39 @@ function Choose({ load, retry }: { load: Load; retry: () => void }) {
   );
 }
 
+type Check = 'checking' | 'match' | 'mismatch' | 'unavailable';
+
+/** Re-run the strategy in this browser and compare with the allocation the server sent. */
+function useAllocationCheck(starter: Starter): Check {
+  const [check, setCheck] = useState<Check>('checking');
+  useEffect(() => {
+    let current = true;
+    setCheck('checking');
+    strategyWeights(starter.strategy)
+      .then((weights) => {
+        if (!current) return;
+        const same =
+          Object.keys(weights).length === starter.holdings.length &&
+          starter.holdings.every((holding) => Math.abs((weights[holding.asset_id] ?? -1) / 1e9 - holding.weight) < 1e-9);
+        setCheck(same ? 'match' : 'mismatch');
+      })
+      .catch(() => current && setCheck('unavailable'));
+    return () => {
+      current = false;
+    };
+  }, [starter]);
+  return check;
+}
+
+const CHECK_TEXT: Record<Check, string> = {
+  checking: 'Checking the allocation in your browser…',
+  match: 'Checked in your browser: this allocation is exactly what the strategy says.',
+  mismatch: 'Warning: your browser worked out a different allocation from the one the server sent.',
+  unavailable: 'This browser could not run the check.',
+};
+
 function Detail({ starter }: { starter: Starter }) {
+  const check = useAllocationCheck(starter);
   const chain = chainName(starter.holdings);
   const largest = Math.max(...starter.holdings.map((holding) => holding.weight));
   const settings = starter.strategy.tradingSettings;
@@ -186,6 +219,16 @@ function Detail({ starter }: { starter: Starter }) {
               </div>
             )}
           </dl>
+          <p className={`check check-${check}`} role="status">
+            <svg viewBox="0 0 20 20" aria-hidden="true">
+              {check === 'match' ? (
+                <path d="m5 10.5 3.2 3.2L15 7" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              ) : (
+                <circle cx="10" cy="10" r="3" fill="currentColor" />
+              )}
+            </svg>
+            {CHECK_TEXT[check]}
+          </p>
           <p className="status">Deposits are not connected yet.</p>
         </section>
         <section className="panel" aria-label="Target allocation">

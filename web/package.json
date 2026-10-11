@@ -4,8 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --host 127.0.0.1",
-    "build": "tsc --noEmit && vite build"
+    "engine": "cargo build -p compounder-wasm --target wasm32-unknown-unknown --release && cp ../target/wasm32-unknown-unknown/release/compounder_wasm.wasm src/engine.wasm",
+    "dev": "npm run engine && vite --host 127.0.0.1",
+    "build": "npm run engine && tsc --noEmit && vite build"
   },
   "dependencies": {
     "@fontsource-variable/inter-tight": "^5.2.5",

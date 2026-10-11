@@ -4,8 +4,9 @@
 use std::{collections::BTreeMap, net::SocketAddr, path::PathBuf, sync::OnceLock};
 
 use axum::{
-    extract::rejection::JsonRejection,
-    http::StatusCode,
+    extract::{rejection::JsonRejection, Request},
+    http::{header::CACHE_CONTROL, HeaderValue, StatusCode},
+    middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
@@ -188,6 +189,21 @@ async fn unknown_api_route() -> ApiError {
     }
 }
 
+/// Built assets carry a content hash in their name and never change, so they
+/// are cached for good. Everything else is revalidated on each load, so a new
+/// build or new data is picked up at once.
+async fn cache_policy(request: Request, next: Next) -> Response {
+    let hashed_asset = request.uri().path().starts_with("/assets/");
+    let mut response = next.run(request).await;
+    let policy = if hashed_asset && response.status().is_success() {
+        "public, max-age=31536000, immutable"
+    } else {
+        "no-cache"
+    };
+    response.headers_mut().insert(CACHE_CONTROL, HeaderValue::from_static(policy));
+    response
+}
+
 fn web_dist() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../web/dist")
 }
@@ -205,7 +221,10 @@ fn app() -> Router {
     Router::new()
         .route("/health", get(health))
         .nest("/v1", api)
+        // A missing asset is a 404, never the app shell under an asset's name.
+        .nest_service("/assets", ServeDir::new(dist.join("assets")))
         .fallback_service(web)
+        .layer(middleware::from_fn(cache_policy))
 }
 
 #[tokio::main]
@@ -222,7 +241,7 @@ async fn main() {
 mod tests {
     use super::*;
     use axum::body::Body;
-    use axum::http::{header, Request};
+    use axum::http::header;
     use tower::ServiceExt;
 
     async fn call(method: &str, path: &str, body: Option<Value>) -> (StatusCode, Value) {
@@ -330,6 +349,19 @@ mod tests {
         let (status, body) = call("POST", "/v1/strategy/validate", Some(json!({ "entry": 7 }))).await;
         assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
         assert_eq!(body["error"]["code"], "invalid_request");
+    }
+
+    #[tokio::test]
+    async fn only_hashed_assets_are_cached_for_good() {
+        let policy = |path: &'static str| async move {
+            let request = Request::builder().uri(path).body(Body::empty()).unwrap();
+            let response = app().oneshot(request).await.unwrap();
+            response.headers().get(CACHE_CONTROL).map(|value| value.to_str().unwrap().to_string())
+        };
+        assert_eq!(policy("/v1/starters").await.as_deref(), Some("no-cache"));
+        assert_eq!(policy("/").await.as_deref(), Some("no-cache"));
+        // A missing asset must not be pinned in a browser's cache.
+        assert_eq!(policy("/assets/missing-0000.js").await.as_deref(), Some("no-cache"));
     }
 
     #[tokio::test]

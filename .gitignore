@@ -1,6 +1,7 @@
 # build output
 /target/
 /web/dist/
+/web/src/engine.wasm
 node_modules/
 
 # local environment and secrets

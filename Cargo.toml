@@ -1,3 +1,7 @@
 [workspace]
 resolver = "2"
-members = ["engine", "server"]
+members = ["engine", "server", "wasm"]
+
+# The browser build is downloaded by every visitor, so it is built for size.
+[profile.release.package.compounder-wasm]
+opt-level = "s"

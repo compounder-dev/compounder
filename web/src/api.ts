@@ -12,6 +12,7 @@ export type Starter = {
   name: string;
   summary: string;
   accent: Accent;
+  /** The full strategy document. Only the trading settings are read here; the engine reads the rest. */
   strategy: { tradingSettings: { type: 'threshold'; triggerPercentage: number } | { type: 'calendar'; frequency: string } };
   holdings: Holding[];
 };

@@ -584,6 +584,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "compounder-wasm"
+version = "0.1.0"
+dependencies = [
+ "compounder-engine",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "const-hex"
 version = "1.19.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
