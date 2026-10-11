@@ -2,6 +2,8 @@
 /target/
 /web/dist/
 /web/src/engine.wasm
+/contracts/out/
+/contracts/cache/
 node_modules/
 
 # local environment and secrets
