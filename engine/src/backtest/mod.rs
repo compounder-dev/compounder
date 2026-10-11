@@ -31,6 +31,10 @@ use compounder_prices::day::Day;
 use orders::{Book, Traded};
 use serde::Serialize;
 
+/// The most a run may start with: a trillion dollars. Far above it, a run
+/// that does well grows past the largest number there is.
+pub const MAX_CAPITAL: f64 = 1e12;
+
 /// What to run a strategy on, besides the strategy and its prices.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Run {
@@ -105,8 +109,8 @@ impl Run {
         let mut refuse = |field: &str, message: String, fix: &str| {
             issues.push(Issue { code: IssueCode::InvalidRun, path: format!("run.{field}"), message, fix: fix.to_string() });
         };
-        if !self.capital.is_finite() || self.capital <= 0.0 {
-            refuse("capital", format!("The capital is {}, which is not an amount above 0.", self.capital), "Start with some money, such as 10000.");
+        if !self.capital.is_finite() || self.capital <= 0.0 || self.capital > MAX_CAPITAL {
+            refuse("capital", format!("The capital is {}, which is not an amount above 0 and at most a trillion.", self.capital), "Start with some money, such as 10000.");
         }
         if !self.slippage.is_finite() || !(0.0..1.0).contains(&self.slippage) {
             refuse("slippage", format!("The slippage is {}, which is not a fraction from 0 to below 1.", self.slippage), "Give it as a fraction, such as 0.0015 for 15 basis points.");

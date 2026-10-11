@@ -335,6 +335,8 @@ pub enum IssueCode {
     ExcessiveNodes,
     ExcessiveDepth,
     ExcessiveConditions,
+    /// The strategy takes more working out each day than is allowed.
+    ExcessiveWork,
     /// An asset in the strategy has no prices to evaluate it on.
     MissingHistory,
     /// There is no trading day on which the strategy can be evaluated.

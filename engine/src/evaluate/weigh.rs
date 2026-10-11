@@ -192,9 +192,11 @@ impl Memo {
 /// the whole block. Several such children share it equally. The rest get
 /// nothing.
 fn inverse_volatility(deviations: &[f64]) -> Vec<f64> {
-    let still = deviations.iter().filter(|deviation| **deviation == 0.0).count();
+    // One over a deviation too small to divide by is as good as none at all.
+    let is_still = |deviation: f64| !(1.0 / deviation).is_finite();
+    let still = deviations.iter().filter(|deviation| is_still(**deviation)).count();
     if still > 0 {
-        return deviations.iter().map(|deviation| if *deviation == 0.0 { 1.0 / still as f64 } else { 0.0 }).collect();
+        return deviations.iter().map(|deviation| if is_still(*deviation) { 1.0 / still as f64 } else { 0.0 }).collect();
     }
     let total: f64 = deviations.iter().map(|deviation| 1.0 / deviation).sum();
     deviations.iter().map(|deviation| 1.0 / deviation / total).collect()
@@ -206,6 +208,14 @@ mod tests {
 
     fn close_to(got: &[f64], expected: &[f64]) -> bool {
         got.len() == expected.len() && got.iter().zip(expected).all(|(got, expected)| (got - expected).abs() <= 1e-15)
+    }
+
+    #[test]
+    fn a_deviation_too_small_to_divide_by_counts_as_none() {
+        // One over 1e-320 is past the largest number there is.
+        assert_eq!(inverse_volatility(&[1e-320, 0.02]), [1.0, 0.0]);
+        assert_eq!(inverse_volatility(&[1e-320, 0.0, 0.02]), [0.5, 0.5, 0.0]);
+        assert!(inverse_volatility(&[1e-300, 0.02]).iter().all(|weight| weight.is_finite()));
     }
 
     #[test]

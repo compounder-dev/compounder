@@ -30,6 +30,14 @@ use ready::Ready;
 use tracks::Tracks;
 use weigh::{Ground, Memo};
 
+/// The most work one evaluation may take, counted in closes gone over: a
+/// reading on a window goes over the window, a reading or a block that keeps
+/// a series for every day counts as 40, and each comparison as 6. A backtest
+/// evaluates a strategy on every day of thirty years, so this is what keeps
+/// one run to about a second. The largest of 137 real strategies measured
+/// comes to 29,000.
+pub const MAX_WORK: usize = 50_000;
+
 /// What a strategy wants to hold at one close, and what it read to decide.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Evaluation {
@@ -97,6 +105,15 @@ impl<'a> Evaluator<'a> {
     /// Prepare a strategy that has been checked.
     fn prepare(strategy: &RuleStrategy, history: &'a History, run_in: bool) -> Result<Evaluator<'a>, Vec<Issue>> {
         let plan = Plan::of(strategy);
+        let work = plan.work();
+        if work > MAX_WORK {
+            return Err(vec![Issue {
+                code: IssueCode::ExcessiveWork,
+                path: "root".to_string(),
+                message: format!("The strategy takes {work} steps to work out each day; the most allowed is {MAX_WORK}. A step is one close that a reading goes over."),
+                fix: "Use fewer distinct readings or conditions, or shorter windows.".to_string(),
+            }]);
+        }
         let mut prices = Vec::with_capacity(plan.assets.len());
         let mut missing = Vec::new();
         for asset in &plan.assets {
@@ -270,6 +287,28 @@ mod tests {
         let left = Reading { indicator: Indicator::RelativeStrength { window: 5 }, asset: listed("OLD") };
         let condition = Condition::Compare(Comparison { left, comparator: Comparator::Above, right: Operand::Fixed(0.5) });
         daily(Node::If { condition, then: vec![asset("OLD")], otherwise: vec![asset("YOUNG")] })
+    }
+
+    #[test]
+    fn a_strategy_that_takes_too_much_working_out_is_refused() {
+        let prices = closes(40.0, 7, 30);
+        let history = history(30, &[("OLD", 0, &prices), ("YOUNG", 0, &prices)]);
+        // Each distinct average over a window of 1,000 goes over 1,000 closes.
+        let averages = |count: u32| {
+            let parts = (0..count).map(|index| {
+                let left = Reading { indicator: Indicator::AveragePrice { window: 1000 - index }, asset: listed("OLD") };
+                Condition::Compare(Comparison { left, comparator: Comparator::Above, right: Operand::Fixed(1.0) })
+            });
+            // A group holds 50 conditions at most, so they go in groups of 30.
+            let groups = parts.collect::<Vec<_>>().chunks(30).map(|group| Condition::All(group.to_vec())).collect();
+            daily(Node::If { condition: Condition::All(groups), then: vec![asset("OLD")], otherwise: vec![asset("YOUNG")] })
+        };
+        assert!(Evaluator::new(&averages(40), &history, false).is_ok());
+        let issues = Evaluator::new(&averages(60), &history, false).err().expect("too much work");
+        assert_eq!(issues.iter().map(|issue| issue.code).collect::<Vec<_>>(), [IssueCode::ExcessiveWork]);
+        // Asking the same thing many times is one reading, and costs little more than once.
+        let same = Condition::All((0..50).map(|_| Condition::Compare(Comparison { left: Reading { indicator: Indicator::AveragePrice { window: 1000 }, asset: listed("OLD") }, comparator: Comparator::Above, right: Operand::Fixed(1.0) })).collect());
+        assert!(Evaluator::new(&daily(Node::If { condition: same, then: vec![asset("OLD")], otherwise: vec![asset("YOUNG")] }), &history, false).is_ok());
     }
 
     #[test]

@@ -10,6 +10,11 @@ use crate::rules::{canonical, Asset, Comparator, Condition, Indicator, Node, Ope
 use serde_json::Value;
 use std::collections::{BTreeSet, HashMap};
 
+/// What taking one reading costs beyond going over its closes, counted in closes.
+const MEASURE_STEPS: usize = 6;
+/// What keeping a series for every day costs, spread over the days.
+const SERIES_STEPS: usize = 40;
+
 pub(crate) struct Plan {
     /// Every asset the tree holds or reads, in order.
     pub assets: Vec<Asset>,
@@ -100,7 +105,36 @@ impl Test {
     }
 }
 
+impl Test {
+    /// How many comparisons the test makes.
+    fn comparisons(&self) -> usize {
+        match self {
+            Test::Compare { .. } => 1,
+            Test::Any(parts) | Test::All(parts) => parts.iter().map(Test::comparisons).sum(),
+        }
+    }
+}
+
 impl Plan {
+    /// How much there is to do each time the strategy is evaluated, counted
+    /// in closes gone over. A reading on a window goes over the window. One
+    /// that carries its value from day to day keeps a series for every day
+    /// there is, and so does each block that a reading is taken on. Each
+    /// comparison and each distinct block is a step of its own.
+    pub fn work(&self) -> usize {
+        let read: usize = self
+            .measures
+            .iter()
+            .map(|measure| match measure.indicator.carries() {
+                true => SERIES_STEPS,
+                false => MEASURE_STEPS + measure.indicator.window().map_or(1, |window| window as usize),
+            })
+            .sum();
+        let tracked = self.measures_on_blocks().iter().filter(|measures| !measures.is_empty()).count();
+        let compared: usize = self.blocks.iter().map(|block| if let Block::If { test, .. } = block { test.comparisons() } else { 0 }).sum();
+        read + tracked * SERIES_STEPS + compared * MEASURE_STEPS + self.blocks.len()
+    }
+
     /// Lay out a strategy that `validate` has passed.
     pub fn of(strategy: &RuleStrategy) -> Plan {
         let (mut held, mut read) = (BTreeSet::new(), BTreeSet::new());

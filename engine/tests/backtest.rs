@@ -202,7 +202,7 @@ fn a_run_that_cannot_be_made_is_refused_with_the_reason() {
     let strategy = daily(equal(vec![asset("AAA"), asset("BBB")]));
     let refused = |run: Run| backtest(&strategy, &history, &run).expect_err("refused").into_iter().map(|issue| (issue.code, issue.path)).collect::<Vec<_>>();
     let at = |code: IssueCode, path: &str| vec![(code, path.to_string())];
-    for capital in [0.0, -100.0, f64::NAN, f64::INFINITY] {
+    for capital in [0.0, -100.0, f64::NAN, f64::INFINITY, 1e13, 1e308] {
         assert_eq!(refused(free(capital)), at(IssueCode::InvalidRun, "run.capital"), "{capital}");
     }
     for slippage in [-0.01, 1.0, 1.5, f64::NAN] {
