@@ -1,7 +1,7 @@
 import { useStarters, type Starter, type TestFigures } from '../api.ts';
 import { useEvent } from '../events.ts';
-import { Banner, Button, Card, CardSkeleton, CardTitle, EmptyState, Number } from '../parts/index.ts';
-import { starterAddress, useTitle } from '../route.ts';
+import { Banner, Button, Card, CardSkeleton, CardTitle, EmptyState, Link, Number } from '../parts/index.ts';
+import { PRICING, starterAddress, useTitle } from '../route.ts';
 import { asFall, changeTone, fundColour, holdsLine, yearOf } from '../starter.ts';
 
 /** The three figures of a test that a card can carry. Each says what it is, and the first says it was tested. */
@@ -90,8 +90,12 @@ export function Home() {
   useEvent('home_seen', 'home');
   return (
     <>
-      <h1 className="page-title home-title">Choose your fund</h1>
-      <p className="page-lead">Start from a fund that is already built. Open one to see what it holds and when it trades.</p>
+      <h1 className="page-title home-title">Build your own wealth fund.</h1>
+      <p className="page-lead">Pick a fund that is already built and see how it would have done over years of real prices.</p>
+      <p className="price-line">
+        Free to build and test. Your first fund is free to run. More funds are $20 a month. <Link href={PRICING}>See pricing</Link>
+      </p>
+      <h2 className="section-title cards-title">Start from one of these</h2>
       <Starters />
     </>
   );

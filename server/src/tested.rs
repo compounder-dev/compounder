@@ -42,10 +42,13 @@ pub struct Test {
     pub body: Bytes,
 }
 
+/// A test and when it was run. None is a test that could not be run.
+type Kept = (Instant, Option<Arc<Test>>);
+
 /// The starters' tests on one price store.
 pub struct Tested {
     prices: Arc<Prices>,
-    kept: Mutex<HashMap<String, (Instant, Option<Arc<Test>>)>>,
+    kept: Mutex<HashMap<String, Kept>>,
 }
 
 impl Tested {

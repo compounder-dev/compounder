@@ -43,7 +43,7 @@
   "screen": "not-found"
  },
  {
-  "path": "/s/é",
+  "path": "/s/\u00e9",
   "screen": "not-found"
  },
  {
@@ -60,6 +60,22 @@
  },
  {
   "path": "",
+  "screen": "not-found"
+ },
+ {
+  "path": "/pricing",
+  "screen": "pricing"
+ },
+ {
+  "path": "/pricing/",
+  "screen": "not-found"
+ },
+ {
+  "path": "/pricing/plus",
+  "screen": "not-found"
+ },
+ {
+  "path": "/Pricing",
   "screen": "not-found"
  }
 ]

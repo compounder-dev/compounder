@@ -594,5 +594,10 @@
     }
    }
   }
+ },
+ {
+  "name": "pricing",
+  "address": "/pricing",
+  "resources": {}
  }
 ]

@@ -15,6 +15,7 @@ use crate::{tested::Figures, Holding, StarterView};
 #[derive(Debug, PartialEq)]
 pub enum Route {
     Home,
+    Pricing,
     Starter(String),
     NotFound,
 }
@@ -22,6 +23,9 @@ pub enum Route {
 pub fn route(path: &str) -> Route {
     if path == "/" {
         return Route::Home;
+    }
+    if path == "/pricing" {
+        return Route::Pricing;
     }
     match path.strip_prefix("/s/") {
         Some(id) if !id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') => Route::Starter(id.to_string()),
@@ -32,6 +36,7 @@ pub fn route(path: &str) -> Route {
 /// What a page shows, with the data it shows it from.
 pub enum Screen<'a> {
     Home(&'a [StarterView]),
+    Pricing,
     Starter(&'a StarterView),
     NotFound,
     /// The server could not make the page that was asked for.
@@ -41,6 +46,8 @@ pub enum Screen<'a> {
 const ICON_HOME: &str = "M3.5 9.5 10 4l6.5 5.5V16a.5.5 0 0 1-.5.5h-3.5V12h-5v4.5H4a.5.5 0 0 1-.5-.5V9.5z";
 const ICON_ARROW_LEFT: &str = "M16 10H4m5-5-5 5 5 5";
 const ICON_CLOCK: &str = "M10 3a7 7 0 1 0 0 14a7 7 0 0 0 0-14zm0 3.5V10l2.5 2";
+const ICON_CHECK: &str = "m4.5 10.5 3.5 3.5 7.5-8";
+const ICON_COIN: &str = "M10 3a7 7 0 1 0 0 14a7 7 0 0 0 0-14zm0 3v8m2-6.2c-.4-.6-1.1-.9-2-.9-1.2 0-2 .6-2 1.4 0 2 4 .9 4 2.8 0 .8-.8 1.4-2 1.4-.9 0-1.7-.4-2.1-1";
 
 const FUND_COLOURS: [&str; 5] = ["blue", "orange", "teal", "violet", "magenta"];
 
@@ -294,7 +301,12 @@ fn bar_share(weight: f64, largest: f64) -> u64 {
 
 fn home(starters: &[StarterView]) -> String {
     let mut out = String::from(
-        r#"<h1 class="page-title home-title">Choose your fund</h1><p class="page-lead">Start from a fund that is already built. Open one to see what it holds and when it trades.</p>"#,
+        concat!(
+            r#"<h1 class="page-title home-title">Build your own wealth fund.</h1>"#,
+            r#"<p class="page-lead">Pick a fund that is already built and see how it would have done over years of real prices.</p>"#,
+            r#"<p class="price-line">Free to build and test. Your first fund is free to run. More funds are $20 a month. <a class="link link-inline" href="/pricing">See pricing</a></p>"#,
+            r#"<h2 class="section-title cards-title">Start from one of these</h2>"#,
+        ),
     );
     if starters.is_empty() {
         out.push_str(r#"<div class="region-notice"><div class="empty"><p>There are no funds to choose from yet.</p><button type="button" class="button button-secondary">Look again</button></div></div>"#);
@@ -367,6 +379,31 @@ fn starter(starter: &StarterView) -> String {
     out
 }
 
+/// The two plans: a name, a price, what the price is for, and what the plan includes.
+const PLANS: [(&str, &str, Option<&str>, [&str; 2]); 2] =
+    [("Free", "$0", None, ["Build and test any fund", "Run one fund"]), ("Plus", "$20", Some("a month"), ["Everything in Free", "Run more than one fund"])];
+
+fn pricing() -> String {
+    let mut out = String::from(r#"<h1 class="page-title">Pricing</h1><p class="page-lead">Free to build and test. Your first fund is free to run.</p><ul class="plans" role="list">"#);
+    for (name, price, per, includes) in PLANS {
+        let per = per.map(|per| format!(r#"<span class="plan-per">{per}</span>"#)).unwrap_or_default();
+        let includes: String = includes.iter().map(|line| format!("<li>{}{line}</li>", icon(ICON_CHECK))).collect();
+        out.push_str(&format!(
+            concat!(
+                r#"<li class="card card-plain plan"><h2 class="card-title">{name}</h2>"#,
+                r#"<p class="plan-price"><span class="number number-title1">{price}</span>{per}</p>"#,
+                r#"<ul class="plan-includes" role="list">{includes}</ul></li>"#,
+            ),
+            name = name,
+            price = price,
+            per = per,
+            includes = includes,
+        ));
+    }
+    out.push_str(r#"</ul><p class="plan-note">Adding money is not open yet, so nothing is charged today.</p>"#);
+    out
+}
+
 const NOT_FOUND: &str = r#"<div class="system"><h1 class="page-title">That page does not exist.</h1><a class="button button-primary" href="/">Go home</a></div>"#;
 
 fn broke(path: &str) -> String {
@@ -381,6 +418,7 @@ fn broke(path: &str) -> String {
 pub fn title(screen: &Screen) -> String {
     match screen {
         Screen::Home(_) => "Compounder".to_string(),
+        Screen::Pricing => "Pricing · Compounder".to_string(),
         Screen::Starter(starter) => format!("{} · Compounder", starter.name),
         Screen::NotFound => "Page not found · Compounder".to_string(),
         Screen::Broke => "Something went wrong · Compounder".to_string(),
@@ -389,14 +427,16 @@ pub fn title(screen: &Screen) -> String {
 
 /// Everything inside the page's root: the frame every screen stands in, and the screen.
 pub fn body(path: &str, screen: &Screen) -> String {
-    // The Home tab is marked on the home screen itself and on the screens under it.
-    let current = match route(path) {
-        Route::Home => r#" aria-current="page""#,
-        Route::Starter(_) => r#" aria-current="true""#,
-        Route::NotFound => "",
+    // A place is marked on its own screen and on the screens under it. A fund's page is under Home.
+    let (home_current, pricing_current) = match route(path) {
+        Route::Home => (r#" aria-current="page""#, ""),
+        Route::Starter(_) => (r#" aria-current="true""#, ""),
+        Route::Pricing => ("", r#" aria-current="page""#),
+        Route::NotFound => ("", ""),
     };
     let inside = match screen {
         Screen::Home(starters) => home(starters),
+        Screen::Pricing => pricing(),
         Screen::Starter(view) => starter(view),
         Screen::NotFound => NOT_FOUND.to_string(),
         Screen::Broke => broke(path),
@@ -406,13 +446,16 @@ pub fn body(path: &str, screen: &Screen) -> String {
             r##"<a class="skip-link" href="#main">Skip to content</a><div class="offline-bar" role="status"></div>"##,
             r#"<header class="top-bar"><div class="top-bar-inner"><a class="wordmark" href="/" aria-label="Compounder, home"><span>Compounder</span>"#,
             r#"<svg class="wordmark-mark" viewBox="0 0 32 32" width="24" height="24" aria-hidden="true"><path d="M5 25c8 0 12.5-2.4 15.7-7.2S25 9 26 5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"></path><circle cx="26" cy="5" r="3" fill="currentColor"></circle></svg></a>"#,
-            r#"<nav class="top-bar-nav" aria-label="Main"><a class="top-bar-link" href="/"{current}>Home</a></nav></div></header>"#,
+            r#"<nav class="top-bar-nav" aria-label="Main"><a class="top-bar-link" href="/"{home_current}>Home</a><a class="top-bar-link" href="/pricing"{pricing_current}>Pricing</a></nav></div></header>"#,
             r#"<main id="main" class="page" tabindex="-1">{inside}</main>"#,
-            r#"<nav class="bottom-bar" aria-label="Main"><a class="tab" href="/"{current}><span class="tab-mark">{home}</span><span>Home</span></a></nav>"#,
+            r#"<nav class="bottom-bar" aria-label="Main"><a class="tab" href="/"{home_current}><span class="tab-mark">{home}</span><span>Home</span></a>"#,
+            r#"<a class="tab" href="/pricing"{pricing_current}><span class="tab-mark">{coin}</span><span>Pricing</span></a></nav>"#,
         ),
-        current = current,
+        home_current = home_current,
+        pricing_current = pricing_current,
         inside = inside,
         home = icon(ICON_HOME),
+        coin = icon(ICON_COIN),
     )
 }
 
@@ -483,6 +526,7 @@ mod tests {
             return body(address, &Screen::Broke);
         }
         match route(address) {
+            Route::Pricing => body(address, &Screen::Pricing),
             Route::Home => {
                 let starters: Vec<StarterView> = serde_json::from_value(case["resources"]["/v1/starters"]["starters"].clone()).unwrap();
                 body(address, &Screen::Home(&starters))
@@ -517,6 +561,7 @@ mod tests {
         for case in cases("routes.json") {
             let expected = match case["screen"].as_str().unwrap() {
                 "home" => Route::Home,
+                "pricing" => Route::Pricing,
                 "starter" => Route::Starter(case["id"].as_str().unwrap().to_string()),
                 _ => Route::NotFound,
             };

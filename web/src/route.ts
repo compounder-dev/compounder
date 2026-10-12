@@ -3,10 +3,13 @@
 
 import { useEffect, useSyncExternalStore, type MouseEvent } from 'react';
 
-export type Route = { screen: 'home' } | { screen: 'starter'; id: string } | { screen: 'not-found' };
+export const PRICING = '/pricing';
+
+export type Route = { screen: 'home' } | { screen: 'pricing' } | { screen: 'starter'; id: string } | { screen: 'not-found' };
 
 export function matchRoute(path: string): Route {
   if (path === '/') return { screen: 'home' };
+  if (path === PRICING) return { screen: 'pricing' };
   const starter = /^\/s\/([A-Za-z0-9_-]+)$/.exec(path);
   if (starter) return { screen: 'starter', id: starter[1] };
   return { screen: 'not-found' };

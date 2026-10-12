@@ -1,17 +1,23 @@
 import { useEffect, useRef } from 'react';
 import { BottomBar, TopBar, type NavItem } from './parts/index.ts';
-import { matchRoute, useAddress, type Route } from './route.ts';
+import { matchRoute, PRICING, useAddress, type Route } from './route.ts';
 import { Home } from './screens/Home.tsx';
+import { Pricing } from './screens/Pricing.tsx';
 import { StarterScreen } from './screens/Starter.tsx';
 import { Boundary, Broke, NotFound, OfflineBar } from './screens/System.tsx';
 
 /** The places the bars lead to. A place joins the list when its screen is built, and not before. */
-const PLACES: NavItem[] = [{ href: '/', label: 'Home', icon: 'home', holds: (path) => matchRoute(path).screen === 'starter' }];
+const PLACES: NavItem[] = [
+  { href: '/', label: 'Home', icon: 'home', holds: (path) => matchRoute(path).screen === 'starter' },
+  { href: PRICING, label: 'Pricing', icon: 'coin', holds: () => false },
+];
 
 function Screen({ route }: { route: Route }) {
   switch (route.screen) {
     case 'home':
       return <Home />;
+    case 'pricing':
+      return <Pricing />;
     case 'starter':
       return <StarterScreen id={route.id} />;
     case 'not-found':

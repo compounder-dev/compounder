@@ -4,7 +4,7 @@
 import { useEffect } from 'react';
 
 /** The events of this step. The server keeps the same list and refuses any other name. */
-export type EventName = 'home_seen' | 'starter_opened';
+export type EventName = 'home_seen' | 'starter_opened' | 'pricing_seen';
 
 export function logEvent(name: EventName, screen: string, id?: string) {
   const body = new Blob([JSON.stringify({ name, screen, id })], { type: 'application/json' });

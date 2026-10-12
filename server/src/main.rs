@@ -307,7 +307,7 @@ fn turns() -> &'static Semaphore {
 }
 
 /// The named events the app may log at this step. A name outside the list is refused.
-const EVENTS: [&str; 2] = ["home_seen", "starter_opened"];
+const EVENTS: [&str; 3] = ["home_seen", "starter_opened", "pricing_seen"];
 
 /// One line of the app's own log: what happened, on which screen, to which strategy or fund.
 /// There is no field for who, and an unknown field is refused, so none can creep in.
@@ -365,6 +365,7 @@ fn web_dist() -> PathBuf {
 /// What an address shows, looked up before a word of the page is written.
 enum Lookup {
     Home(Vec<StarterView>),
+    Pricing,
     Starter(Box<StarterView>),
     NotFound,
     /// The data for the page could not be made.
@@ -374,6 +375,7 @@ enum Lookup {
 fn look_up(path: &str, tested: Option<&Tested>) -> Lookup {
     match page::route(path) {
         page::Route::Home => starter_views(tested).map_or(Lookup::Broke, Lookup::Home),
+        page::Route::Pricing => Lookup::Pricing,
         page::Route::Starter(id) => match starters().iter().find(|starter| starter.id == id) {
             Some(starter) => starter_view(starter, tested).map_or(Lookup::Broke, |view| Lookup::Starter(Box::new(view))),
             None => Lookup::NotFound,
@@ -386,6 +388,7 @@ fn look_up(path: &str, tested: Option<&Tested>) -> Lookup {
 fn respond(shell: &str, path: &str, lookup: &Lookup) -> (StatusCode, Html<String>) {
     let (status, screen) = match lookup {
         Lookup::Home(views) => (StatusCode::OK, page::Screen::Home(views)),
+        Lookup::Pricing => (StatusCode::OK, page::Screen::Pricing),
         Lookup::Starter(view) => (StatusCode::OK, page::Screen::Starter(view)),
         Lookup::NotFound => (StatusCode::NOT_FOUND, page::Screen::NotFound),
         Lookup::Broke => (StatusCode::INTERNAL_SERVER_ERROR, page::Screen::Broke),
@@ -660,7 +663,7 @@ mod tests {
         let build = Build::new("old-shell", &[("index.html", r#"<html><head><title>Compounder</title></head><body><div id="root"></div></body></html>"#)]);
         let response = build.get("/", None).await;
         assert_eq!(response.status(), StatusCode::OK);
-        assert!(text_of(response).await.contains("Choose your fund"));
+        assert!(text_of(response).await.contains("Build your own wealth fund."));
     }
 
     #[tokio::test]
@@ -709,7 +712,7 @@ mod tests {
         assert_eq!(status, StatusCode::OK);
         assert!(kind.starts_with("text/html"), "{kind}");
         assert!(text.contains("<title>Compounder</title>"));
-        assert!(text.contains("Choose your fund"));
+        assert!(text.contains("Build your own wealth fund."));
         for starter in starters() {
             assert!(text.contains(&format!(r#"<a class="card-link" href="/s/{}">{}</a>"#, starter.id, starter.name)), "{}", starter.id);
         }
@@ -735,6 +738,18 @@ mod tests {
         let largest = page::percent(holdings[0]["weight"].as_f64().unwrap(), false);
         assert!(text.contains(&format!(r#"<span class="number">{largest}</span>"#)), "{largest}");
         assert_eq!(seed_in(&text)["resources"]["/v1/starters/hard-assets"], asked);
+    }
+
+    #[tokio::test]
+    async fn the_pricing_page_says_what_it_costs_in_its_first_response() {
+        let (status, kind, text) = page("/pricing").await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(kind.starts_with("text/html"), "{kind}");
+        assert!(text.contains("<title>Pricing · Compounder</title>"), "{text}");
+        assert!(text.contains("$20") && text.contains("a month") && text.contains("Run one fund"), "{text}");
+        // The home page says the price as well, with the way to this page.
+        let (_, _, home) = page("/").await;
+        assert!(home.contains("$20 a month") && home.contains(r#"href="/pricing""#), "{home}");
     }
 
     #[tokio::test]
