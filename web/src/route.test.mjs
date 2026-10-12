@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { forwardedAddress, leftToBrowser, matchRoute, starterAddress, withFlag } from './route.ts';
+import { forwardedAddress, leftToBrowser, matchRoute, strategyAddress, withFlag } from './route.ts';
 
 // The server reads the same file, so both sides send an address to the same screen.
 const cases = JSON.parse(readFileSync(new URL('../contract/routes.json', import.meta.url), 'utf8'));
@@ -15,7 +15,7 @@ test('every address goes to the screen the contract says', () => {
 test('an old address after the hash forwards to its real path', () => {
   assert.equal(forwardedAddress('#/portfolio/hard-assets'), '/s/hard-assets');
   assert.equal(forwardedAddress('#/'), '/');
-  assert.deepEqual(matchRoute(forwardedAddress('#/portfolio/ai-build-out')), { screen: 'starter', id: 'ai-build-out' });
+  assert.deepEqual(matchRoute(forwardedAddress('#/portfolio/ai-build-out')), { screen: 'strategy', id: 'ai-build-out' });
 });
 
 test('a hash that is not an old address is left alone', () => {
@@ -24,8 +24,8 @@ test('a hash that is not an old address is left alone', () => {
   }
 });
 
-test('a starter address is one the app matches', () => {
-  assert.deepEqual(matchRoute(starterAddress('magnificent-seven')), { screen: 'starter', id: 'magnificent-seven' });
+test('a strategy address is one the app matches', () => {
+  assert.deepEqual(matchRoute(strategyAddress('magnificent-seven')), { screen: 'strategy', id: 'magnificent-seven' });
 });
 
 test('a flag in the query is set and cleared without touching the others', () => {

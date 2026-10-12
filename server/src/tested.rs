@@ -13,8 +13,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
-    backtest,
+    backtest, largest_first,
     prices::{Prices, KEEP},
+    Holding,
 };
 
 /// What every starter is set beside.
@@ -36,16 +37,17 @@ pub struct Figures {
     pub cost: f64,
 }
 
-/// One starter's test: its leading figures, and the whole answer as it is sent.
+/// One fund's test: its leading figures, what it held on the last day, and the whole answer as it is sent.
 pub struct Test {
     pub figures: Figures,
+    pub holdings: Vec<Holding>,
     pub body: Bytes,
 }
 
 /// A test and when it was run. None is a test that could not be run.
 type Kept = (Instant, Option<Arc<Test>>);
 
-/// The starters' tests on one price store.
+/// The catalogue's tests on one price store.
 pub struct Tested {
     prices: Arc<Prices>,
     kept: Mutex<HashMap<String, Kept>>,
@@ -56,7 +58,7 @@ impl Tested {
         Tested { prices, kept: Mutex::new(HashMap::new()) }
     }
 
-    /// The test of the starter `id`, run again once the prices it was run on have been let go.
+    /// The test of the fund `id`, run again once the prices it was run on have been let go.
     /// None when it cannot be run, which is said once in the log and then kept as well.
     pub fn of(&self, id: &str, rules: &RuleStrategy) -> Option<Arc<Test>> {
         if let Some((at, test)) = self.kept.lock().expect("no test panics while it is kept").get(id) {
@@ -68,7 +70,7 @@ impl Tested {
         let test = match run(&self.prices, rules) {
             Ok(test) => Some(Arc::new(test)),
             Err(reason) => {
-                eprintln!("the starter {id} could not be tested: {reason}");
+                eprintln!("the fund {id} could not be tested: {reason}");
                 None
             }
         };
@@ -94,5 +96,24 @@ fn run(prices: &Prices, rules: &RuleStrategy) -> Result<Test, String> {
         benchmark_per_year: benchmark["stats"]["annual_return"].as_f64().filter(|_| same_days),
         cost: answer["slippage"].as_f64().ok_or("the answer does not say what a trade cost")?,
     };
-    Ok(Test { figures, body: Bytes::from(answer.to_string()) })
+    Ok(Test { figures, holdings: held(&answer), body: Bytes::from(answer.to_string()) })
+}
+
+/// What the run held at the end of its last day, largest first. An asset it held none of is left out.
+fn held(answer: &Value) -> Vec<Holding> {
+    let (assets, weights) = (answer["assets"].as_array(), answer["holdings"]["weights"].as_array());
+    let mut rows: Vec<Holding> = assets
+        .into_iter()
+        .flatten()
+        .zip(weights.into_iter().flatten())
+        .filter_map(|(asset, weight)| {
+            let weight = weight.as_f64().filter(|weight| *weight > 0.0)?;
+            let text = |value: &Value| value.as_str().map(str::to_string);
+            // A token is known by its id, a listed share by its symbol.
+            let asset_id = text(&asset["asset"]["token"]).or_else(|| text(&asset["asset"]["symbol"]))?;
+            Some(Holding { asset_id, symbol: text(&asset["symbol"]), name: text(&asset["name"]), weight })
+        })
+        .collect();
+    largest_first(&mut rows);
+    rows
 }

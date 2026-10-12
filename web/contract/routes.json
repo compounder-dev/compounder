@@ -5,17 +5,17 @@
  },
  {
   "path": "/s/magnificent-seven",
-  "screen": "starter",
+  "screen": "strategy",
   "id": "magnificent-seven"
  },
  {
   "path": "/s/odd_one-2",
-  "screen": "starter",
+  "screen": "strategy",
   "id": "odd_one-2"
  },
  {
   "path": "/s/A1",
-  "screen": "starter",
+  "screen": "strategy",
   "id": "A1"
  },
  {
@@ -55,10 +55,6 @@
   "screen": "not-found"
  },
  {
-  "path": "/explore",
-  "screen": "not-found"
- },
- {
   "path": "",
   "screen": "not-found"
  },
@@ -76,6 +72,18 @@
  },
  {
   "path": "/Pricing",
+  "screen": "not-found"
+ },
+ {
+  "path": "/explore",
+  "screen": "explore"
+ },
+ {
+  "path": "/explore/",
+  "screen": "not-found"
+ },
+ {
+  "path": "/explore/rules",
   "screen": "not-found"
  }
 ]

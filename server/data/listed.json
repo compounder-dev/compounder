@@ -1,0 +1,80 @@
+{
+ "listed": [
+  {
+   "symbol": "VTI",
+   "name": "US stock market"
+  },
+  {
+   "symbol": "AGG",
+   "name": "US bonds"
+  },
+  {
+   "symbol": "TLT",
+   "name": "Long-term US government bonds"
+  },
+  {
+   "symbol": "IEF",
+   "name": "Mid-term US government bonds"
+  },
+  {
+   "symbol": "GLD",
+   "name": "Gold"
+  },
+  {
+   "symbol": "DBC",
+   "name": "Commodities"
+  },
+  {
+   "symbol": "BIL",
+   "name": "Short-term US government bills"
+  },
+  {
+   "symbol": "SPY",
+   "name": "S&P 500"
+  },
+  {
+   "symbol": "EFA",
+   "name": "Developed markets outside the US"
+  },
+  {
+   "symbol": "QQQ",
+   "name": "Nasdaq 100"
+  },
+  {
+   "symbol": "TQQQ",
+   "name": "Nasdaq 100, three times each day's move"
+  },
+  {
+   "symbol": "XLK",
+   "name": "Technology"
+  },
+  {
+   "symbol": "XLF",
+   "name": "Financials"
+  },
+  {
+   "symbol": "XLE",
+   "name": "Energy"
+  },
+  {
+   "symbol": "XLV",
+   "name": "Health care"
+  },
+  {
+   "symbol": "XLI",
+   "name": "Industrials"
+  },
+  {
+   "symbol": "XLY",
+   "name": "Consumer discretionary"
+  },
+  {
+   "symbol": "XLP",
+   "name": "Consumer staples"
+  },
+  {
+   "symbol": "XLU",
+   "name": "Utilities"
+  }
+ ]
+}

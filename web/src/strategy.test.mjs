@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { barShare, displayName, fundColour, holdsLine, markLetter, sameAllocation, ticker, tradesLine } from './starter.ts';
+import { barShare, displayName, fundColour, holdsLine, markLetter, matching, sameAllocation, ticker } from './strategy.ts';
 
 const holding = (symbol, name = null, weight = 0) => ({ asset_id: '0xabcdef0123:56', symbol, name, weight });
 
@@ -37,10 +37,22 @@ test('the holds line names up to five and counts the rest', () => {
   assert.equal(holdsLine(of(13)), 'T1, T2, T3, T4 and 9 more');
 });
 
-test('the trades line says when a fund trades', () => {
-  assert.equal(tradesLine({ type: 'threshold', triggerPercentage: 10 }), 'When a holding drifts 10% from its target');
-  assert.equal(tradesLine({ type: 'threshold', triggerPercentage: 7.5 }), 'When a holding drifts 7.5% from its target');
-  assert.equal(tradesLine({ type: 'calendar', frequency: 'weekly' }), 'On a weekly schedule');
+test('a search finds a fund by its name, its sentence, what it holds and what its rules name', () => {
+  const fund = (id, kind, summary, held, outline) => ({ id, name: id, summary, accent: 'blue', kind, starter: false, trades: '', holdings: held, outline });
+  const funds = [
+    fund('Hard Assets', 'basket', 'Gold first.', [holding('GLDon', 'SPDR Gold Shares (Ondo Tokenized)')]),
+    fund('Trend Switch', 'rules', 'Holds the S&P 500 or bills.', [holding('SPY', 'S&P 500')], [{ depth: 1, kind: 'asset', text: 'BIL', name: 'Short-term US government bills' }]),
+  ];
+  const found = (typed, kind = 'all') => matching(funds, typed, kind).map((each) => each.id);
+  assert.deepEqual(found(''), ['Hard Assets', 'Trend Switch']);
+  assert.deepEqual(found('  gold '), ['Hard Assets']);
+  assert.deepEqual(found('GLD'), ['Hard Assets']);
+  assert.deepEqual(found('bills trend'), ['Trend Switch']);
+  // A fund is found by what its rules can hold, not only by what it holds today.
+  assert.deepEqual(found('bil'), ['Trend Switch']);
+  assert.deepEqual(found('s&p', 'basket'), []);
+  assert.deepEqual(found('', 'rules'), ['Trend Switch']);
+  assert.deepEqual(found('nothing here'), []);
 });
 
 test('a colour outside the five falls back to the first', () => {
@@ -67,7 +79,7 @@ test('the browser check passes only on the same assets with the same shares', ()
 });
 
 test('a day is written as its month and year, and anything else as it stands', async () => {
-  const { monthYear, yearOf } = await import('./starter.ts');
+  const { monthYear, yearOf } = await import('./strategy.ts');
   assert.equal(monthYear('2012-05-18'), 'May 2012');
   assert.equal(monthYear('2026-12-01'), 'Dec 2026');
   for (const odd of ['2012-13-18', '2012-00-18', '12-05-18', '2012-5-18', 'soon', '']) assert.equal(monthYear(odd), odd);
@@ -75,7 +87,7 @@ test('a day is written as its month and year, and anything else as it stands', a
 });
 
 test('a change that prints as zero has no colour', async () => {
-  const { changeTone, asFall } = await import('./starter.ts');
+  const { changeTone, asFall } = await import('./strategy.ts');
   assert.deepEqual([0.361, -0.02, 0.00001, -0.00001, null].map(changeTone), ['gain', 'loss', 'plain', 'plain', 'plain']);
   assert.deepEqual([asFall(0.5), asFall(null), Object.is(asFall(0), 0)], [-0.5, null, true]);
 });

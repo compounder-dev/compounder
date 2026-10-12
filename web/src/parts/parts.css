@@ -1119,3 +1119,109 @@
 .table thead th {
   color: var(--text-faint);
 }
+
+/* ---- Field ---- */
+
+.field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--size-input);
+  padding: 0 var(--space-4);
+  border: var(--size-hairline) solid var(--stroke-control);
+  border-radius: var(--radius-control);
+  background: var(--ground-surface);
+  color: var(--text-muted);
+  cursor: text;
+}
+
+/* The ring goes round the whole field, which is what a person sees as the control. */
+.field:focus-within {
+  outline: var(--size-focus-width) solid var(--focus-ring);
+  outline-offset: var(--size-focus-gap);
+}
+
+.field-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  letter-spacing: inherit;
+  appearance: none;
+}
+
+.field-input::placeholder {
+  color: var(--text-faint);
+}
+
+/* The browser's own clear button and search mark differ from one to the next. The field has its own mark. */
+.field-input::-webkit-search-decoration,
+.field-input::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+/* ---- Ticker ---- */
+
+.ticker {
+  flex: none;
+  padding: 0 var(--space-2);
+  border-radius: var(--space-2);
+  background: var(--ground-hover);
+  color: var(--text-primary);
+  font: var(--type-small);
+  letter-spacing: var(--type-small-tracking);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Outline ---- */
+
+/* A strategy's rules as blocks, each set in as deep as it sits. The colour says what kind of block it is. */
+.outline {
+  display: grid;
+  justify-items: start;
+  gap: var(--row-gap);
+}
+
+.outline-line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: calc(100% - var(--depth) * var(--space-6));
+  min-height: var(--size-block);
+  margin-left: calc(var(--depth) * var(--space-6));
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-control);
+  background: var(--ground-raised);
+  text-wrap: pretty;
+}
+
+.outline-split {
+  background: var(--block-weight);
+  color: var(--block-ink);
+}
+
+.outline-if,
+.outline-then,
+.outline-else,
+.outline-condition {
+  background: var(--block-condition);
+  color: var(--block-ink);
+}
+
+.outline-pick {
+  background: var(--block-filter);
+  color: var(--block-ink);
+}
+
+.outline-name {
+  color: var(--text-muted);
+}
+
+.outline-asset .number {
+  margin-left: var(--space-2);
+}

@@ -1,0 +1,507 @@
+{
+ "strategies": [
+  {
+   "id": "sixty-forty",
+   "name": "Sixty Forty",
+   "summary": "Sixty parts shares to forty parts bonds, put back in balance every quarter.",
+   "accent": "blue",
+   "rules": {
+    "name": "Sixty Forty",
+    "rebalance": {
+     "type": "calendar",
+     "frequency": "quarterly"
+    },
+    "root": {
+     "block": "weight",
+     "weighting": {
+      "type": "specified",
+      "shares": [
+       0.6,
+       0.4
+      ]
+     },
+     "children": [
+      {
+       "block": "asset",
+       "asset": {
+        "market": "equities",
+        "symbol": "VTI"
+       }
+      },
+      {
+       "block": "asset",
+       "asset": {
+        "market": "equities",
+        "symbol": "AGG"
+       }
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "all-seasons",
+   "name": "All Seasons",
+   "summary": "Shares, long and mid-term bonds, gold and commodities, sized so no one kind of year decides the result.",
+   "accent": "teal",
+   "rules": {
+    "name": "All Seasons",
+    "rebalance": {
+     "type": "calendar",
+     "frequency": "yearly"
+    },
+    "root": {
+     "block": "weight",
+     "weighting": {
+      "type": "specified",
+      "shares": [
+       0.3,
+       0.4,
+       0.15,
+       0.075,
+       0.075
+      ]
+     },
+     "children": [
+      {
+       "block": "asset",
+       "asset": {
+        "market": "equities",
+        "symbol": "VTI"
+       }
+      },
+      {
+       "block": "asset",
+       "asset": {
+        "market": "equities",
+        "symbol": "TLT"
+       }
+      },
+      {
+       "block": "asset",
+       "asset": {
+        "market": "equities",
+        "symbol": "IEF"
+       }
+      },
+      {
+       "block": "asset",
+       "asset": {
+        "market": "equities",
+        "symbol": "GLD"
+       }
+      },
+      {
+       "block": "asset",
+       "asset": {
+        "market": "equities",
+        "symbol": "DBC"
+       }
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "four-quarters",
+   "name": "Four Quarters",
+   "summary": "A quarter each in shares, long bonds, gold and cash, for growth, slumps, inflation and panics.",
+   "accent": "violet",
+   "rules": {
+    "name": "Four Quarters",
+    "rebalance": {
+     "type": "calendar",
+     "frequency": "yearly"
+    },
+    "root": {
+     "block": "weight",
+     "weighting": {
+      "type": "specified",
+      "shares": [
+       0.25,
+       0.25,
+       0.25,
+       0.25
+      ]
+     },
+     "children": [
+      {
+       "block": "asset",
+       "asset": {
+        "market": "equities",
+        "symbol": "VTI"
+       }
+      },
+      {
+       "block": "asset",
+       "asset": {
+        "market": "equities",
+        "symbol": "TLT"
+       }
+      },
+      {
+       "block": "asset",
+       "asset": {
+        "market": "equities",
+        "symbol": "GLD"
+       }
+      },
+      {
+       "block": "asset",
+       "asset": {
+        "market": "equities",
+        "symbol": "BIL"
+       }
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "trend-switch",
+   "name": "Trend Switch",
+   "summary": "Holds the S&P 500 while it is above its 200-day average, and short-term bills while it is below.",
+   "accent": "orange",
+   "rules": {
+    "name": "Trend Switch",
+    "rebalance": {
+     "type": "calendar",
+     "frequency": "daily"
+    },
+    "root": {
+     "block": "if",
+     "condition": {
+      "compare": "above",
+      "left": {
+       "indicator": "price",
+       "asset": {
+        "market": "equities",
+        "symbol": "SPY"
+       }
+      },
+      "right": {
+       "indicator": "average_price",
+       "asset": {
+        "market": "equities",
+        "symbol": "SPY"
+       },
+       "window": 200
+      }
+     },
+     "then": [
+      {
+       "block": "asset",
+       "asset": {
+        "market": "equities",
+        "symbol": "SPY"
+       }
+      }
+     ],
+     "else": [
+      {
+       "block": "asset",
+       "asset": {
+        "market": "equities",
+        "symbol": "BIL"
+       }
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "home-or-away",
+   "name": "Home or Away",
+   "summary": "Each month, holds whichever of US and overseas shares did better over the past year, or bonds when neither beat cash.",
+   "accent": "magenta",
+   "rules": {
+    "name": "Home or Away",
+    "rebalance": {
+     "type": "calendar",
+     "frequency": "monthly"
+    },
+    "root": {
+     "block": "if",
+     "condition": {
+      "any": [
+       {
+        "compare": "above",
+        "left": {
+         "indicator": "cumulative_return",
+         "asset": {
+          "market": "equities",
+          "symbol": "SPY"
+         },
+         "window": 252
+        },
+        "right": {
+         "indicator": "cumulative_return",
+         "asset": {
+          "market": "equities",
+          "symbol": "BIL"
+         },
+         "window": 252
+        }
+       },
+       {
+        "compare": "above",
+        "left": {
+         "indicator": "cumulative_return",
+         "asset": {
+          "market": "equities",
+          "symbol": "EFA"
+         },
+         "window": 252
+        },
+        "right": {
+         "indicator": "cumulative_return",
+         "asset": {
+          "market": "equities",
+          "symbol": "BIL"
+         },
+         "window": 252
+        }
+       }
+      ]
+     },
+     "then": [
+      {
+       "block": "filter",
+       "sort_by": {
+        "indicator": "cumulative_return",
+        "window": 252
+       },
+       "take": "top",
+       "count": 1,
+       "children": [
+        {
+         "block": "asset",
+         "asset": {
+          "market": "equities",
+          "symbol": "SPY"
+         }
+        },
+        {
+         "block": "asset",
+         "asset": {
+          "market": "equities",
+          "symbol": "EFA"
+         }
+        }
+       ]
+      }
+     ],
+     "else": [
+      {
+       "block": "asset",
+       "asset": {
+        "market": "equities",
+        "symbol": "AGG"
+       }
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "sector-leaders",
+   "name": "Sector Leaders",
+   "summary": "Each month, holds the three parts of the US market that rose most over the past six months, in equal parts.",
+   "accent": "blue",
+   "rules": {
+    "name": "Sector Leaders",
+    "rebalance": {
+     "type": "calendar",
+     "frequency": "monthly"
+    },
+    "root": {
+     "block": "filter",
+     "sort_by": {
+      "indicator": "cumulative_return",
+      "window": 126
+     },
+     "take": "top",
+     "count": 3,
+     "children": [
+      {
+       "block": "asset",
+       "asset": {
+        "market": "equities",
+        "symbol": "XLK"
+       }
+      },
+      {
+       "block": "asset",
+       "asset": {
+        "market": "equities",
+        "symbol": "XLF"
+       }
+      },
+      {
+       "block": "asset",
+       "asset": {
+        "market": "equities",
+        "symbol": "XLE"
+       }
+      },
+      {
+       "block": "asset",
+       "asset": {
+        "market": "equities",
+        "symbol": "XLV"
+       }
+      },
+      {
+       "block": "asset",
+       "asset": {
+        "market": "equities",
+        "symbol": "XLI"
+       }
+      },
+      {
+       "block": "asset",
+       "asset": {
+        "market": "equities",
+        "symbol": "XLY"
+       }
+      },
+      {
+       "block": "asset",
+       "asset": {
+        "market": "equities",
+        "symbol": "XLP"
+       }
+      },
+      {
+       "block": "asset",
+       "asset": {
+        "market": "equities",
+        "symbol": "XLU"
+       }
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "calm-weights",
+   "name": "Calm Weights",
+   "summary": "Shares, bonds, gold and commodities, with more put in whichever has been calmer over the past three months.",
+   "accent": "teal",
+   "rules": {
+    "name": "Calm Weights",
+    "rebalance": {
+     "type": "calendar",
+     "frequency": "monthly"
+    },
+    "root": {
+     "block": "weight",
+     "weighting": {
+      "type": "inverse_volatility",
+      "window": 63
+     },
+     "children": [
+      {
+       "block": "asset",
+       "asset": {
+        "market": "equities",
+        "symbol": "VTI"
+       }
+      },
+      {
+       "block": "asset",
+       "asset": {
+        "market": "equities",
+        "symbol": "TLT"
+       }
+      },
+      {
+       "block": "asset",
+       "asset": {
+        "market": "equities",
+        "symbol": "GLD"
+       }
+      },
+      {
+       "block": "asset",
+       "asset": {
+        "market": "equities",
+        "symbol": "DBC"
+       }
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "fast-lane-with-a-brake",
+   "name": "Fast Lane with a Brake",
+   "summary": "Three times the Nasdaq 100 while its trend is up and it is not overheated, and short-term bills the rest of the time.",
+   "accent": "orange",
+   "rules": {
+    "name": "Fast Lane with a Brake",
+    "rebalance": {
+     "type": "calendar",
+     "frequency": "daily"
+    },
+    "root": {
+     "block": "if",
+     "condition": {
+      "all": [
+       {
+        "compare": "above",
+        "left": {
+         "indicator": "price",
+         "asset": {
+          "market": "equities",
+          "symbol": "QQQ"
+         }
+        },
+        "right": {
+         "indicator": "average_price",
+         "asset": {
+          "market": "equities",
+          "symbol": "QQQ"
+         },
+         "window": 200
+        }
+       },
+       {
+        "compare": "below",
+        "left": {
+         "indicator": "relative_strength",
+         "asset": {
+          "market": "equities",
+          "symbol": "QQQ"
+         },
+         "window": 10
+        },
+        "right": {
+         "fixed": 0.8
+        }
+       }
+      ]
+     },
+     "then": [
+      {
+       "block": "asset",
+       "asset": {
+        "market": "equities",
+        "symbol": "TQQQ"
+       }
+      }
+     ],
+     "else": [
+      {
+       "block": "asset",
+       "asset": {
+        "market": "equities",
+        "symbol": "BIL"
+       }
+      }
+     ]
+    }
+   }
+  }
+ ]
+}

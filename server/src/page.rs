@@ -6,17 +6,17 @@
 //! `web/contract` hold both sides to that: the web build draws them with the
 //! parts, and the tests below write them from here.
 
-use compounder_engine::strategy::TradingSettings;
 use serde_json::{json, Value};
 
-use crate::{tested::Figures, Holding, StarterView};
+use crate::{outline::Line, tested::Figures, Holding, StrategyView};
 
 /// The screen an address belongs to. `matchRoute` in `web/src/route.ts` follows the same rules.
 #[derive(Debug, PartialEq)]
 pub enum Route {
     Home,
+    Explore,
     Pricing,
-    Starter(String),
+    Strategy(String),
     NotFound,
 }
 
@@ -24,20 +24,25 @@ pub fn route(path: &str) -> Route {
     if path == "/" {
         return Route::Home;
     }
+    if path == "/explore" {
+        return Route::Explore;
+    }
     if path == "/pricing" {
         return Route::Pricing;
     }
     match path.strip_prefix("/s/") {
-        Some(id) if !id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') => Route::Starter(id.to_string()),
+        Some(id) if !id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') => Route::Strategy(id.to_string()),
         _ => Route::NotFound,
     }
 }
 
 /// What a page shows, with the data it shows it from.
 pub enum Screen<'a> {
-    Home(&'a [StarterView]),
+    /// The home page is handed every fund and leads with the starters among them.
+    Home(&'a [StrategyView]),
+    Explore(&'a [StrategyView]),
     Pricing,
-    Starter(&'a StarterView),
+    Strategy(&'a StrategyView),
     NotFound,
     /// The server could not make the page that was asked for.
     Broke,
@@ -47,6 +52,7 @@ const ICON_HOME: &str = "M3.5 9.5 10 4l6.5 5.5V16a.5.5 0 0 1-.5.5h-3.5V12h-5v4.5
 const ICON_ARROW_LEFT: &str = "M16 10H4m5-5-5 5 5 5";
 const ICON_CLOCK: &str = "M10 3a7 7 0 1 0 0 14a7 7 0 0 0 0-14zm0 3.5V10l2.5 2";
 const ICON_CHECK: &str = "m4.5 10.5 3.5 3.5 7.5-8";
+const ICON_SEARCH: &str = "M9 3.5a5.5 5.5 0 1 0 0 11a5.5 5.5 0 0 0 0-11zm4 9.5 3.5 3.5";
 const ICON_COIN: &str = "M10 3a7 7 0 1 0 0 14a7 7 0 0 0 0-14zm0 3v8m2-6.2c-.4-.6-1.1-.9-2-.9-1.2 0-2 .6-2 1.4 0 2 4 .9 4 2.8 0 .8-.8 1.4-2 1.4-.9 0-1.7-.4-2.1-1";
 
 const FUND_COLOURS: [&str; 5] = ["blue", "orange", "teal", "violet", "magenta"];
@@ -172,7 +178,7 @@ fn change_tone(change: Option<f64>) -> &'static str {
     }
 }
 
-// ---- words drawn from a test: the rules of `web/src/starter.ts` ----
+// ---- words drawn from a test: the rules of `web/src/strategy.ts` ----
 
 const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -228,7 +234,7 @@ fn results(test: &Figures) -> String {
     let large = |tone: &str| format!(" number-title2{tone}");
     format!(
         concat!(
-            r#"<section class="starter-results" aria-labelledby="results-title"><h2 class="section-title" id="results-title">How it would have done</h2>"#,
+            r#"<section class="strategy-results" aria-labelledby="results-title"><h2 class="section-title" id="results-title">How it would have done</h2>"#,
             r#"<dl class="stat-band"><div><dt>Per year</dt><dd>{per_year}</dd></div>"#,
             r#"<div><dt>Worst drop</dt><dd>{worst_drop}</dd></div>"#,
             r#"<div><dt>Sharpe ratio</dt><dd>{sharpe}</dd></div>"#,
@@ -244,7 +250,7 @@ fn results(test: &Figures) -> String {
     )
 }
 
-// ---- words drawn from a starter: the rules of `web/src/starter.ts` ----
+// ---- words drawn from a fund: the rules of `web/src/strategy.ts` ----
 
 /// The ticker a person recognises, without the issuer's ending.
 fn ticker(holding: &Holding) -> String {
@@ -276,14 +282,7 @@ fn holds_line(holdings: &[Holding]) -> String {
     }
 }
 
-fn trades_line(settings: &TradingSettings) -> String {
-    match settings {
-        TradingSettings::Threshold { trigger_percentage } => format!("When a holding drifts {}% from its target", quantity(*trigger_percentage)),
-        TradingSettings::Calendar { frequency } => format!("On a {frequency} schedule"),
-    }
-}
-
-/// The identity colour a starter was given, or the first one for a name outside the five.
+/// The identity colour a fund was given, or the first one for a name outside the five.
 fn fund_colour(accent: &str) -> &'static str {
     FUND_COLOURS.iter().copied().find(|colour| *colour == accent).unwrap_or(FUND_COLOURS[0])
 }
@@ -299,57 +298,107 @@ fn bar_share(weight: f64, largest: f64) -> u64 {
 
 // ---- the screens ----
 
-fn home(starters: &[StarterView]) -> String {
-    let mut out = String::from(
+/// One fund in a list: its name, one sentence, what it holds and what its test came to.
+fn card(view: &StrategyView) -> String {
+    let holds = if view.holdings.is_empty() {
+        String::new()
+    } else {
+        format!(r#"<dl class="card-facts"><div><dt>Holds</dt><dd>{}</dd></div></dl>"#, escape(&holds_line(&view.holdings)))
+    };
+    format!(
         concat!(
-            r#"<h1 class="page-title home-title">Build your own wealth fund.</h1>"#,
-            r#"<p class="page-lead">Pick a fund that is already built and see how it would have done over years of real prices.</p>"#,
-            r#"<p class="price-line">Free to build and test. Your first fund is free to run. More funds are $20 a month. <a class="link link-inline" href="/pricing">See pricing</a></p>"#,
-            r#"<h2 class="section-title cards-title">Start from one of these</h2>"#,
+            r#"<li class="card card-strategy fund-{colour}">"#,
+            r#"<h2 class="card-title"><span class="fund-dot" aria-hidden="true"></span><a class="card-link" href="/s/{id}">{name}</a></h2>"#,
+            r#"<p class="card-summary">{summary}</p>{holds}{figures}</li>"#,
         ),
-    );
-    if starters.is_empty() {
-        out.push_str(r#"<div class="region-notice"><div class="empty"><p>There are no funds to choose from yet.</p><button type="button" class="button button-secondary">Look again</button></div></div>"#);
+        colour = fund_colour(&view.accent),
+        id = escape(&view.id),
+        name = escape(&view.name),
+        summary = escape(&view.summary),
+        holds = holds,
+        figures = view.test.as_ref().map(card_figures).unwrap_or_default(),
+    )
+}
+
+fn cards<'a>(views: impl Iterator<Item = &'a StrategyView>) -> String {
+    format!(r#"<ul class="cards" role="list">{}</ul>"#, views.map(card).collect::<String>())
+}
+
+fn empty(words: &str, action: &str) -> String {
+    format!(r#"<div class="region-notice"><div class="empty"><p>{words}</p><button type="button" class="button button-secondary">{action}</button></div></div>"#)
+}
+
+fn home(views: &[StrategyView]) -> String {
+    let mut out = String::from(concat!(
+        r#"<h1 class="page-title home-title">Build your own wealth fund.</h1>"#,
+        r#"<p class="page-lead">Pick a fund that is already built and see how it would have done over years of real prices.</p>"#,
+        r#"<p class="price-line">Free to build and test. Your first fund is free to run. More funds are $20 a month. <a class="link link-inline" href="/pricing">See pricing</a></p>"#,
+        r#"<h2 class="section-title cards-title">Start from one of these</h2>"#,
+    ));
+    // The home page leads with the few funds a person can begin with. The rest are on Explore.
+    if !views.iter().any(|view| view.starter) {
+        out.push_str(&empty("There are no funds to choose from yet.", "Look again"));
         return out;
     }
-    out.push_str(r#"<ul class="cards" role="list">"#);
-    for starter in starters {
-        out.push_str(&format!(
-            concat!(
-                r#"<li class="card card-strategy fund-{colour}">"#,
-                r#"<h2 class="card-title"><span class="fund-dot" aria-hidden="true"></span><a class="card-link" href="/s/{id}">{name}</a></h2>"#,
-                r#"<p class="card-summary">{summary}</p>"#,
-                r#"<dl class="card-facts"><div><dt>Holds</dt><dd>{holds}</dd></div></dl>{figures}</li>"#,
-            ),
-            colour = fund_colour(&starter.accent),
-            id = escape(&starter.id),
-            name = escape(&starter.name),
-            summary = escape(&starter.summary),
-            holds = escape(&holds_line(&starter.holdings)),
-            figures = starter.test.as_ref().map(card_figures).unwrap_or_default(),
-        ));
-    }
-    out.push_str("</ul>");
+    out.push_str(&cards(views.iter().filter(|view| view.starter)));
+    out.push_str(&format!(r#"<p class="more-link"><a class="link link-standalone" href="/explore">{}Explore all funds</a></p>"#, icon(ICON_SEARCH)));
     out
 }
 
-fn starter(starter: &StarterView) -> String {
-    let largest = starter.holdings.iter().map(|holding| holding.weight).fold(0.0, f64::max);
-    let mut out = format!(
+/// The kinds a list of funds can be narrowed to, with the one that is chosen first.
+const KINDS: [(&str, &str); 3] = [("all", "All"), ("basket", "Baskets"), ("rules", "Rule based")];
+
+/// Every fund there is. The search and the choice of kind work in the browser, so this is the list whole.
+fn explore(views: &[StrategyView]) -> String {
+    let kinds: String = KINDS
+        .iter()
+        .enumerate()
+        .map(|(place, (value, label))| {
+            let checked = if place == 0 { r#" checked="""# } else { "" };
+            format!(r#"<label class="segment"><input type="radio" name="explore-kind"{checked} value="{value}"/><span>{label}</span></label>"#)
+        })
+        .collect();
+    let count = if views.len() == 1 { "1 fund".to_string() } else { format!("{} funds", views.len()) };
+    let list = if views.is_empty() { empty("Nothing matches. Try a shorter word.", "Show all") } else { cards(views.iter()) };
+    format!(
         concat!(
-            r#"<p class="back-link"><a class="link link-standalone" href="/">{back}All funds</a></p>"#,
-            r#"<div class="starter fund-{colour}">"#,
-            r#"<header class="starter-head"><h1 class="page-title"><span class="fund-dot" aria-hidden="true"></span>{name}</h1><p class="page-lead">{summary}</p></header>"#,
-            "{results}",
-            r#"<section class="starter-holdings" aria-labelledby="holdings-title"><h2 class="section-title" id="holdings-title">What it holds</h2><ul class="rows" role="list">"#,
+            r#"<h1 class="page-title">Explore</h1><p class="page-lead">Funds to start from. Each one is tested on years of real prices.</p>"#,
+            r#"<div class="explore-tools"><label class="field"><span class="sr-only">Search funds</span>{search}"#,
+            r#"<input class="field-input" type="search" placeholder="Search funds and holdings" autoComplete="off" value=""/></label>"#,
+            r#"<fieldset class="segmented"><legend class="sr-only">Kind of fund</legend>{kinds}</fieldset></div>"#,
+            r#"<p class="sr-only" role="status">{count}</p>{list}"#,
         ),
-        back = icon(ICON_ARROW_LEFT),
-        colour = fund_colour(&starter.accent),
-        name = escape(&starter.name),
-        summary = escape(&starter.summary),
-        results = starter.test.as_ref().map(results).unwrap_or_default(),
+        search = icon(ICON_SEARCH),
+        kinds = kinds,
+        count = count,
+        list = list,
+    )
+}
+
+/// The rules in the words they were given, each line set in as deep as it sits in the strategy.
+fn rules(lines: &[Line]) -> String {
+    let mut out = String::from(r#"<section class="strategy-rules" aria-labelledby="rules-title"><h2 class="section-title" id="rules-title">The rules</h2><ol class="outline" role="list">"#);
+    for line in lines {
+        let inside = if line.kind == "asset" {
+            let name = line.name.as_deref().map(|name| format!(r#"<span class="outline-name">{}</span>"#, escape(name))).unwrap_or_default();
+            let share = line.share.map(|share| number(&percent(share, false))).unwrap_or_default();
+            format!(r#"<span class="ticker">{}</span>{name}{share}"#, escape(&line.text))
+        } else {
+            escape(&line.text)
+        };
+        out.push_str(&format!(r#"<li class="outline-line outline-{}" style="--depth:{}">{inside}</li>"#, escape(&line.kind), line.depth));
+    }
+    out.push_str("</ol></section>");
+    out
+}
+
+fn held(view: &StrategyView) -> String {
+    let largest = view.holdings.iter().map(|holding| holding.weight).fold(0.0, f64::max);
+    let mut out = format!(
+        r#"<section class="strategy-holdings" aria-labelledby="holdings-title"><h2 class="section-title" id="holdings-title">{}</h2><ul class="rows" role="list">"#,
+        if view.starter { "What it holds" } else { "What it holds now" }
     );
-    for holding in &starter.holdings {
+    for holding in &view.holdings {
         let detail = holding.symbol.as_ref().map(|_| format!(r#"<span class="row-detail">{}</span>"#, escape(&ticker(holding)))).unwrap_or_default();
         out.push_str(&format!(
             concat!(
@@ -364,19 +413,41 @@ fn starter(starter: &StarterView) -> String {
             weight = number(&percent(holding.weight, false)),
         ));
     }
-    // The line about the check in the browser holds its place and says nothing until a browser has run it.
-    out.push_str(&format!(
-        concat!(
-            r#"</ul><p class="check check-idle" role="status">{clock}Checking the allocation in your browser…</p></section>"#,
-            r#"<aside class="card card-plain starter-facts" aria-label="Facts"><dl class="facts">"#,
-            r#"<div><dt>Holdings</dt><dd>{count}</dd></div><div><dt>Trades</dt><dd>{trades}</dd></div></dl>"#,
-            r#"<p class="starter-note">Adding money is not open yet.</p></aside></div>"#,
-        ),
-        clock = icon(ICON_CLOCK),
-        count = number(&quantity(starter.holdings.len() as f64)),
-        trades = escape(&trades_line(&starter.strategy.trading_settings)),
-    ));
+    out.push_str("</ul>");
+    // Only a fund with a fixed document can be checked in the browser. The line about the check
+    // holds its place and says nothing until a browser has run it.
+    if view.fixed.is_some() {
+        out.push_str(&format!(r#"<p class="check check-idle" role="status">{}Checking the allocation in your browser…</p>"#, icon(ICON_CLOCK)));
+    }
+    out.push_str("</section>");
     out
+}
+
+fn strategy(view: &StrategyView) -> String {
+    let count = if view.holdings.is_empty() {
+        String::new()
+    } else {
+        format!("<div><dt>Holdings</dt><dd>{}</dd></div>", number(&quantity(view.holdings.len() as f64)))
+    };
+    format!(
+        concat!(
+            r#"<p class="back-link"><a class="link link-standalone" href="/explore">{back}All funds</a></p>"#,
+            r#"<div class="strategy fund-{colour}">"#,
+            r#"<header class="strategy-head"><h1 class="page-title"><span class="fund-dot" aria-hidden="true"></span>{name}</h1><p class="page-lead">{summary}</p></header>"#,
+            "{results}{rules}{held}",
+            r#"<aside class="card card-plain strategy-facts" aria-label="Facts"><dl class="facts">{count}<div><dt>Trades</dt><dd>{trades}</dd></div></dl>"#,
+            r#"<p class="strategy-note">Adding money is not open yet.</p></aside></div>"#,
+        ),
+        back = icon(ICON_ARROW_LEFT),
+        colour = fund_colour(&view.accent),
+        name = escape(&view.name),
+        summary = escape(&view.summary),
+        results = view.test.as_ref().map(results).unwrap_or_default(),
+        rules = if view.outline.is_empty() { String::new() } else { rules(&view.outline) },
+        held = if view.holdings.is_empty() { String::new() } else { held(view) },
+        count = count,
+        trades = escape(&view.trades),
+    )
 }
 
 /// The two plans: a name, a price, what the price is for, and what the plan includes.
@@ -418,8 +489,9 @@ fn broke(path: &str) -> String {
 pub fn title(screen: &Screen) -> String {
     match screen {
         Screen::Home(_) => "Compounder".to_string(),
+        Screen::Explore(_) => "Explore · Compounder".to_string(),
         Screen::Pricing => "Pricing · Compounder".to_string(),
-        Screen::Starter(starter) => format!("{} · Compounder", starter.name),
+        Screen::Strategy(view) => format!("{} · Compounder", view.name),
         Screen::NotFound => "Page not found · Compounder".to_string(),
         Screen::Broke => "Something went wrong · Compounder".to_string(),
     }
@@ -427,35 +499,38 @@ pub fn title(screen: &Screen) -> String {
 
 /// Everything inside the page's root: the frame every screen stands in, and the screen.
 pub fn body(path: &str, screen: &Screen) -> String {
-    // A place is marked on its own screen and on the screens under it. A fund's page is under Home.
-    let (home_current, pricing_current) = match route(path) {
-        Route::Home => (r#" aria-current="page""#, ""),
-        Route::Starter(_) => (r#" aria-current="true""#, ""),
-        Route::Pricing => ("", r#" aria-current="page""#),
-        Route::NotFound => ("", ""),
+    // A place is marked on its own screen and on the screens under it. A fund's page is under Explore.
+    const PAGE: &str = r#" aria-current="page""#;
+    let (home_current, explore_current, pricing_current) = match route(path) {
+        Route::Home => (PAGE, "", ""),
+        Route::Explore => ("", PAGE, ""),
+        Route::Strategy(_) => ("", r#" aria-current="true""#, ""),
+        Route::Pricing => ("", "", PAGE),
+        Route::NotFound => ("", "", ""),
     };
     let inside = match screen {
-        Screen::Home(starters) => home(starters),
+        Screen::Home(views) => home(views),
+        Screen::Explore(views) => explore(views),
         Screen::Pricing => pricing(),
-        Screen::Starter(view) => starter(view),
+        Screen::Strategy(view) => strategy(view),
         Screen::NotFound => NOT_FOUND.to_string(),
         Screen::Broke => broke(path),
     };
+    let places = [("/", "Home", ICON_HOME, home_current), ("/explore", "Explore", ICON_SEARCH, explore_current), ("/pricing", "Pricing", ICON_COIN, pricing_current)];
+    let links: String = places.iter().map(|(href, label, _, current)| format!(r#"<a class="top-bar-link" href="{href}"{current}>{label}</a>"#)).collect();
+    let tabs: String = places.iter().map(|(href, label, mark, current)| format!(r#"<a class="tab" href="{href}"{current}><span class="tab-mark">{}</span><span>{label}</span></a>"#, icon(mark))).collect();
     format!(
         concat!(
             r##"<a class="skip-link" href="#main">Skip to content</a><div class="offline-bar" role="status"></div>"##,
             r#"<header class="top-bar"><div class="top-bar-inner"><a class="wordmark" href="/" aria-label="Compounder, home"><span>Compounder</span>"#,
             r#"<svg class="wordmark-mark" viewBox="0 0 32 32" width="24" height="24" aria-hidden="true"><path d="M5 25c8 0 12.5-2.4 15.7-7.2S25 9 26 5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"></path><circle cx="26" cy="5" r="3" fill="currentColor"></circle></svg></a>"#,
-            r#"<nav class="top-bar-nav" aria-label="Main"><a class="top-bar-link" href="/"{home_current}>Home</a><a class="top-bar-link" href="/pricing"{pricing_current}>Pricing</a></nav></div></header>"#,
+            r#"<nav class="top-bar-nav" aria-label="Main">{links}</nav></div></header>"#,
             r#"<main id="main" class="page" tabindex="-1">{inside}</main>"#,
-            r#"<nav class="bottom-bar" aria-label="Main"><a class="tab" href="/"{home_current}><span class="tab-mark">{home}</span><span>Home</span></a>"#,
-            r#"<a class="tab" href="/pricing"{pricing_current}><span class="tab-mark">{coin}</span><span>Pricing</span></a></nav>"#,
+            r#"<nav class="bottom-bar" aria-label="Main">{tabs}</nav>"#,
         ),
-        home_current = home_current,
-        pricing_current = pricing_current,
+        links = links,
         inside = inside,
-        home = icon(ICON_HOME),
-        coin = icon(ICON_COIN),
+        tabs = tabs,
     )
 }
 
@@ -463,9 +538,9 @@ pub fn body(path: &str, screen: &Screen) -> String {
 /// A null says the server has no such thing.
 pub fn seed(path: &str, screen: &Screen) -> Value {
     let resources = match (screen, route(path)) {
-        (Screen::Home(starters), _) => json!({ "/v1/starters": { "starters": starters } }),
-        (Screen::Starter(view), _) => json!({ format!("/v1/starters/{}", view.id): { "starter": view } }),
-        (Screen::NotFound, Route::Starter(id)) => json!({ format!("/v1/starters/{id}"): null }),
+        (Screen::Home(views) | Screen::Explore(views), _) => json!({ "/v1/strategies": { "strategies": views } }),
+        (Screen::Strategy(view), _) => json!({ format!("/v1/strategies/{}", view.id): { "strategy": view } }),
+        (Screen::NotFound, Route::Strategy(id)) => json!({ format!("/v1/strategies/{id}"): null }),
         _ => json!({}),
     };
     match screen {
@@ -527,15 +602,15 @@ mod tests {
         }
         match route(address) {
             Route::Pricing => body(address, &Screen::Pricing),
-            Route::Home => {
-                let starters: Vec<StarterView> = serde_json::from_value(case["resources"]["/v1/starters"]["starters"].clone()).unwrap();
-                body(address, &Screen::Home(&starters))
+            Route::Home | Route::Explore => {
+                let views: Vec<StrategyView> = serde_json::from_value(case["resources"]["/v1/strategies"]["strategies"].clone()).unwrap();
+                body(address, &if route(address) == Route::Home { Screen::Home(&views) } else { Screen::Explore(&views) })
             }
-            Route::Starter(id) => match &case["resources"][format!("/v1/starters/{id}")] {
+            Route::Strategy(id) => match &case["resources"][format!("/v1/strategies/{id}")] {
                 Value::Null => body(address, &Screen::NotFound),
                 found => {
-                    let view: StarterView = serde_json::from_value(found["starter"].clone()).unwrap();
-                    body(address, &Screen::Starter(&view))
+                    let view: StrategyView = serde_json::from_value(found["strategy"].clone()).unwrap();
+                    body(address, &Screen::Strategy(&view))
                 }
             },
             Route::NotFound => body(address, &Screen::NotFound),
@@ -561,8 +636,9 @@ mod tests {
         for case in cases("routes.json") {
             let expected = match case["screen"].as_str().unwrap() {
                 "home" => Route::Home,
+                "explore" => Route::Explore,
                 "pricing" => Route::Pricing,
-                "starter" => Route::Starter(case["id"].as_str().unwrap().to_string()),
+                "strategy" => Route::Strategy(case["id"].as_str().unwrap().to_string()),
                 _ => Route::NotFound,
             };
             assert_eq!(route(case["path"].as_str().unwrap()), expected, "{}", case["path"]);
@@ -619,13 +695,13 @@ mod tests {
 
     #[test]
     fn the_data_in_a_page_cannot_close_its_own_script() {
-        let mut view: StarterView = serde_json::from_value(cases("cases.json")[2]["resources"]["/v1/starters/six-makers"]["starter"].clone()).unwrap();
+        let mut view: StrategyView = serde_json::from_value(cases("cases.json")[2]["resources"]["/v1/strategies/six-makers"]["strategy"].clone()).unwrap();
         view.summary = "</script><script>alert(1)</script>".into();
-        let page = document(BARE_SHELL, "/s/six-makers", &Screen::Starter(&view));
+        let page = document(BARE_SHELL, "/s/six-makers", &Screen::Strategy(&view));
         assert_eq!(page.matches("</script>").count(), 1, "{page}");
         let data = page.split(r#"id="seed">"#).nth(1).unwrap().split("</script>").next().unwrap();
         let read: Value = serde_json::from_str(data).unwrap();
-        assert_eq!(read["resources"]["/v1/starters/six-makers"]["starter"]["summary"], "</script><script>alert(1)</script>");
+        assert_eq!(read["resources"]["/v1/strategies/six-makers"]["strategy"]["summary"], "</script><script>alert(1)</script>");
     }
 
     #[test]

@@ -1,14 +1,16 @@
 import { useEffect, useRef } from 'react';
 import { BottomBar, TopBar, type NavItem } from './parts/index.ts';
-import { matchRoute, PRICING, useAddress, type Route } from './route.ts';
+import { EXPLORE, matchRoute, PRICING, useAddress, type Route } from './route.ts';
+import { Explore } from './screens/Explore.tsx';
 import { Home } from './screens/Home.tsx';
 import { Pricing } from './screens/Pricing.tsx';
-import { StarterScreen } from './screens/Starter.tsx';
+import { StrategyScreen } from './screens/Strategy.tsx';
 import { Boundary, Broke, NotFound, OfflineBar } from './screens/System.tsx';
 
 /** The places the bars lead to. A place joins the list when its screen is built, and not before. */
 const PLACES: NavItem[] = [
-  { href: '/', label: 'Home', icon: 'home', holds: (path) => matchRoute(path).screen === 'starter' },
+  { href: '/', label: 'Home', icon: 'home', holds: () => false },
+  { href: EXPLORE, label: 'Explore', icon: 'search', holds: (path) => matchRoute(path).screen === 'strategy' },
   { href: PRICING, label: 'Pricing', icon: 'coin', holds: () => false },
 ];
 
@@ -16,10 +18,12 @@ function Screen({ route }: { route: Route }) {
   switch (route.screen) {
     case 'home':
       return <Home />;
+    case 'explore':
+      return <Explore />;
     case 'pricing':
       return <Pricing />;
-    case 'starter':
-      return <StarterScreen id={route.id} />;
+    case 'strategy':
+      return <StrategyScreen id={route.id} />;
     case 'not-found':
       return <NotFound />;
   }

@@ -5,6 +5,8 @@
 mod page;
 
 mod backtest;
+mod catalogue;
+mod outline;
 mod prices;
 mod tested;
 
@@ -28,7 +30,8 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use compounder_engine::{rules::RuleStrategy, strategy::Strategy};
+use catalogue::Entry;
+use compounder_engine::strategy::Strategy;
 use prices::Prices;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -59,20 +62,6 @@ struct AssetFile {
     assets: Vec<Asset>,
 }
 
-#[derive(Deserialize)]
-struct Starter {
-    id: String,
-    name: String,
-    summary: String,
-    accent: String,
-    strategy: Strategy,
-}
-
-#[derive(Deserialize)]
-struct StarterFile {
-    starters: Vec<Starter>,
-}
-
 fn assets() -> &'static BTreeMap<String, Asset> {
     static ASSETS: OnceLock<BTreeMap<String, Asset>> = OnceLock::new();
     ASSETS.get_or_init(|| {
@@ -81,16 +70,8 @@ fn assets() -> &'static BTreeMap<String, Asset> {
     })
 }
 
-fn starters() -> &'static Vec<Starter> {
-    static STARTERS: OnceLock<Vec<Starter>> = OnceLock::new();
-    STARTERS.get_or_init(|| {
-        let file: StarterFile = serde_json::from_str(include_str!("../data/starters.json")).expect("data/starters.json is valid");
-        file.starters
-    })
-}
-
 /// One line of a resolved portfolio: an asset and its share.
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 struct Holding {
     asset_id: String,
     /// Null when the asset is not in the registry.
@@ -99,7 +80,7 @@ struct Holding {
     weight: f64,
 }
 
-/// Largest share first; ties in asset-id order so the list is stable.
+/// The holdings a fixed strategy aims for, each with what the registry knows of it.
 fn holdings(targets: BTreeMap<String, f64>) -> Vec<Holding> {
     let mut rows: Vec<Holding> = targets
         .into_iter()
@@ -113,51 +94,76 @@ fn holdings(targets: BTreeMap<String, f64>) -> Vec<Holding> {
             }
         })
         .collect();
-    rows.sort_by(|a, b| b.weight.total_cmp(&a.weight).then_with(|| a.asset_id.cmp(&b.asset_id)));
+    largest_first(&mut rows);
     rows
 }
 
-/// A starter as the app is sent it: its words, its strategy and what the strategy holds.
+/// Largest share first; ties in asset-id order so the list is stable.
+fn largest_first(rows: &mut [Holding]) {
+    rows.sort_by(|a, b| b.weight.total_cmp(&a.weight).then_with(|| a.asset_id.cmp(&b.asset_id)));
+}
+
+/// A fund as the app is sent it: its words, its rules, what its test came to and what it holds.
 #[derive(Serialize, Deserialize)]
-struct StarterView {
+struct StrategyView {
     id: String,
     name: String,
     summary: String,
     accent: String,
-    strategy: Strategy,
-    /// The same fund as a rule document, which is what a backtest takes.
+    /// "basket" when it holds named assets in set shares, "rules" when what it holds follows from prices.
+    kind: String,
+    /// One of the funds the home page leads with.
+    #[serde(default)]
+    starter: bool,
+    /// The fixed document the money side runs and a browser can check. Only a starter has one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    fixed: Option<Strategy>,
+    /// The fund as a rule document, which is what a backtest takes.
     #[serde(default, skip_serializing_if = "Value::is_null")]
     rules: Value,
+    /// When it trades, in words.
+    trades: String,
+    /// Its rules in plain words. A starter has none: what it holds is all its rules say.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    outline: Vec<outline::Line>,
     /// What its test over past prices came to, where there are prices to test it on.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     test: Option<Figures>,
+    /// A starter's targets. For any other fund, what its test held on its last day.
     holdings: Vec<Holding>,
 }
 
-fn starter_view(starter: &Starter, tested: Option<&Tested>) -> Result<StarterView, ApiError> {
-    let targets = starter.strategy.targets().map_err(ApiError::invalid_strategy)?;
-    let rules = RuleStrategy::from_fixed(&starter.strategy).map_err(ApiError::invalid_strategy)?;
-    Ok(StarterView {
-        id: starter.id.clone(),
-        name: starter.name.clone(),
-        summary: starter.summary.clone(),
-        accent: starter.accent.clone(),
-        strategy: starter.strategy.clone(),
-        rules: rules.document(),
-        test: tested.and_then(|tested| tested.of(&starter.id, &rules)).map(|test| test.figures.clone()),
-        holdings: holdings(targets),
+fn strategy_view(entry: &Entry, tested: Option<&Tested>) -> Result<StrategyView, ApiError> {
+    let test = tested.and_then(|tested| tested.of(&entry.id, &entry.rules));
+    let holdings = match &entry.fixed {
+        Some(fixed) => holdings(fixed.targets().map_err(ApiError::invalid_strategy)?),
+        None => test.as_ref().map(|test| test.holdings.clone()).unwrap_or_default(),
+    };
+    Ok(StrategyView {
+        id: entry.id.clone(),
+        name: entry.name.clone(),
+        summary: entry.summary.clone(),
+        accent: entry.accent.clone(),
+        kind: if entry.is_basket() { "basket" } else { "rules" }.to_string(),
+        starter: entry.is_starter(),
+        fixed: entry.fixed.clone(),
+        rules: entry.rules.document(),
+        trades: outline::trades(&entry.rules.rebalance),
+        outline: if entry.is_starter() { Vec::new() } else { outline::lines(&entry.rules) },
+        test: test.map(|test| test.figures.clone()),
+        holdings,
     })
 }
 
-fn starter_views(tested: Option<&Tested>) -> Result<Vec<StarterView>, ApiError> {
-    starters().iter().map(|starter| starter_view(starter, tested)).collect()
+fn strategy_views(tested: Option<&Tested>) -> Result<Vec<StrategyView>, ApiError> {
+    catalogue::entries().iter().map(|entry| strategy_view(entry, tested)).collect()
 }
 
-fn find_starter(id: &str) -> Result<&'static Starter, ApiError> {
-    starters().iter().find(|starter| starter.id == id).ok_or_else(|| ApiError::not_found("no such starter"))
+fn find_strategy(id: &str) -> Result<&'static Entry, ApiError> {
+    catalogue::find(id).ok_or_else(|| ApiError::not_found("no such strategy"))
 }
 
-/// What every route can reach: the price store, when there is one, and the starters' tests on it.
+/// What every route can reach: the price store, when there is one, and the catalogue's tests on it.
 #[derive(Clone)]
 struct Shared {
     prices: Option<Arc<Prices>>,
@@ -255,25 +261,24 @@ async fn list_assets() -> Json<Value> {
     Json(json!({ "assets": assets().values().collect::<Vec<_>>() }))
 }
 
-async fn list_starters(State(shared): State<Shared>) -> ApiResult {
-    let views = aside(move || starter_views(shared.tested.as_deref())).await??;
-    Ok(Json(json!({ "starters": views })))
+async fn list_strategies(State(shared): State<Shared>) -> ApiResult {
+    let views = aside(move || strategy_views(shared.tested.as_deref())).await??;
+    Ok(Json(json!({ "strategies": views })))
 }
 
-async fn one_starter(State(shared): State<Shared>, Path(id): Path<String>) -> ApiResult {
-    let starter = find_starter(&id)?;
-    let view = aside(move || starter_view(starter, shared.tested.as_deref())).await??;
-    Ok(Json(json!({ "starter": view })))
+async fn one_strategy(State(shared): State<Shared>, Path(id): Path<String>) -> ApiResult {
+    let entry = find_strategy(&id)?;
+    let view = aside(move || strategy_view(entry, shared.tested.as_deref())).await??;
+    Ok(Json(json!({ "strategy": view })))
 }
 
-/// A starter's whole test, day by day, beside its benchmark: what the chart on its page draws.
-async fn starter_test(State(shared): State<Shared>, Path(id): Path<String>) -> Result<Response, ApiError> {
-    let starter = find_starter(&id)?;
+/// A fund's whole test, day by day, beside its benchmark: what the chart on its page draws.
+async fn strategy_test(State(shared): State<Shared>, Path(id): Path<String>) -> Result<Response, ApiError> {
+    let entry = find_strategy(&id)?;
     let Some(tested) = shared.tested else {
-        return Err(ApiError::unavailable("this server has no price history to test a starter on"));
+        return Err(ApiError::unavailable("this server has no price history to test a strategy on"));
     };
-    let rules = RuleStrategy::from_fixed(&starter.strategy).map_err(ApiError::invalid_strategy)?;
-    let test = aside(move || tested.of(&starter.id, &rules)).await?.ok_or_else(|| ApiError::unavailable("this starter cannot be tested just now"))?;
+    let test = aside(move || tested.of(&entry.id, &entry.rules)).await?.ok_or_else(|| ApiError::unavailable("this strategy cannot be tested just now"))?;
     Ok(([(CONTENT_TYPE, HeaderValue::from_static("application/json"))], test.body.clone()).into_response())
 }
 
@@ -307,7 +312,7 @@ fn turns() -> &'static Semaphore {
 }
 
 /// The named events the app may log at this step. A name outside the list is refused.
-const EVENTS: [&str; 3] = ["home_seen", "starter_opened", "pricing_seen"];
+const EVENTS: [&str; 4] = ["home_seen", "explore_seen", "strategy_opened", "pricing_seen"];
 
 /// One line of the app's own log: what happened, on which screen, to which strategy or fund.
 /// There is no field for who, and an unknown field is refused, so none can creep in.
@@ -364,9 +369,10 @@ fn web_dist() -> PathBuf {
 
 /// What an address shows, looked up before a word of the page is written.
 enum Lookup {
-    Home(Vec<StarterView>),
+    Home(Vec<StrategyView>),
+    Explore(Vec<StrategyView>),
     Pricing,
-    Starter(Box<StarterView>),
+    Strategy(Box<StrategyView>),
     NotFound,
     /// The data for the page could not be made.
     Broke,
@@ -374,10 +380,11 @@ enum Lookup {
 
 fn look_up(path: &str, tested: Option<&Tested>) -> Lookup {
     match page::route(path) {
-        page::Route::Home => starter_views(tested).map_or(Lookup::Broke, Lookup::Home),
+        page::Route::Home => strategy_views(tested).map_or(Lookup::Broke, Lookup::Home),
+        page::Route::Explore => strategy_views(tested).map_or(Lookup::Broke, Lookup::Explore),
         page::Route::Pricing => Lookup::Pricing,
-        page::Route::Starter(id) => match starters().iter().find(|starter| starter.id == id) {
-            Some(starter) => starter_view(starter, tested).map_or(Lookup::Broke, |view| Lookup::Starter(Box::new(view))),
+        page::Route::Strategy(id) => match catalogue::find(&id) {
+            Some(entry) => strategy_view(entry, tested).map_or(Lookup::Broke, |view| Lookup::Strategy(Box::new(view))),
             None => Lookup::NotFound,
         },
         page::Route::NotFound => Lookup::NotFound,
@@ -388,8 +395,9 @@ fn look_up(path: &str, tested: Option<&Tested>) -> Lookup {
 fn respond(shell: &str, path: &str, lookup: &Lookup) -> (StatusCode, Html<String>) {
     let (status, screen) = match lookup {
         Lookup::Home(views) => (StatusCode::OK, page::Screen::Home(views)),
+        Lookup::Explore(views) => (StatusCode::OK, page::Screen::Explore(views)),
         Lookup::Pricing => (StatusCode::OK, page::Screen::Pricing),
-        Lookup::Starter(view) => (StatusCode::OK, page::Screen::Starter(view)),
+        Lookup::Strategy(view) => (StatusCode::OK, page::Screen::Strategy(view)),
         Lookup::NotFound => (StatusCode::NOT_FOUND, page::Screen::NotFound),
         Lookup::Broke => (StatusCode::INTERNAL_SERVER_ERROR, page::Screen::Broke),
     };
@@ -418,9 +426,9 @@ fn router(dist: PathBuf, prices: Option<Arc<Prices>>) -> Router {
     let assets = ServeDir::new(dist.join("assets")).precompressed_br().precompressed_gzip();
     let api = Router::new()
         .route("/assets", get(list_assets))
-        .route("/starters", get(list_starters))
-        .route("/starters/{id}", get(one_starter))
-        .route("/starters/{id}/test", get(starter_test))
+        .route("/strategies", get(list_strategies))
+        .route("/strategies/{id}", get(one_strategy))
+        .route("/strategies/{id}/test", get(strategy_test))
         .route("/strategy/validate", post(validate_strategy))
         .route("/strategy/targets", post(strategy_targets))
         .route("/backtest", post(backtest_strategy))
@@ -575,9 +583,9 @@ mod tests {
 
     #[tokio::test]
     async fn every_starter_is_fully_allocated_to_known_tokens() {
-        let (status, body) = call("GET", "/v1/starters", None).await;
+        let (status, body) = call("GET", "/v1/strategies", None).await;
         assert_eq!(status, StatusCode::OK, "{body}");
-        let starters = body["starters"].as_array().unwrap();
+        let starters: Vec<&Value> = body["strategies"].as_array().unwrap().iter().filter(|strategy| strategy["starter"] == true).collect();
         assert_eq!(starters.len(), 3);
         for starter in starters {
             let holdings = starter["holdings"].as_array().unwrap();
@@ -636,7 +644,7 @@ mod tests {
             let response = router(dist(), None).oneshot(request).await.unwrap();
             response.headers().get(CACHE_CONTROL).map(|value| value.to_str().unwrap().to_string())
         };
-        assert_eq!(policy("/v1/starters").await.as_deref(), Some("no-cache"));
+        assert_eq!(policy("/v1/strategies").await.as_deref(), Some("no-cache"));
         assert_eq!(policy("/").await.as_deref(), Some("no-cache"));
         assert_eq!(policy("/s/hard-assets").await.as_deref(), Some("no-cache"));
         assert_eq!(policy("/assets/app-1a2b.js").await.as_deref(), Some("public, max-age=31536000, immutable"));
@@ -651,7 +659,7 @@ mod tests {
         let page = text_of(build.get("/s/hard-assets", None).await).await;
         assert!(page.contains(r#"<link rel="stylesheet" href="/assets/app-1a2b.css">"#));
         assert!(page.contains(r#"<div id="root"><a class="skip-link""#));
-        assert!(page.contains(r#"<script type="application/json" id="seed">{"resources":{"/v1/starters/hard-assets":"#));
+        assert!(page.contains(r#"<script type="application/json" id="seed">{"resources":{"/v1/strategies/hard-assets":"#));
         assert_eq!(text_of(build.get("/icon.svg", None).await).await, "<svg/>");
         // A folder of the build is not a page of the app.
         assert_eq!(build.get("/assets", None).await.status(), StatusCode::NOT_FOUND);
@@ -685,23 +693,23 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn one_starter_is_served_by_its_id() {
-        let (status, body) = call("GET", "/v1/starters/hard-assets", None).await;
+    async fn one_fund_is_served_by_its_id() {
+        let (status, body) = call("GET", "/v1/strategies/hard-assets", None).await;
         assert_eq!(status, StatusCode::OK, "{body}");
-        assert_eq!(body["starter"]["name"], "Hard Assets");
-        let (_, list) = call("GET", "/v1/starters", None).await;
-        let listed = list["starters"].as_array().unwrap().iter().find(|starter| starter["id"] == "hard-assets").unwrap();
-        assert_eq!(&body["starter"], listed);
+        assert_eq!(body["strategy"]["name"], "Hard Assets");
+        let (_, list) = call("GET", "/v1/strategies", None).await;
+        let listed = list["strategies"].as_array().unwrap().iter().find(|starter| starter["id"] == "hard-assets").unwrap();
+        assert_eq!(&body["strategy"], listed);
 
-        let (status, body) = call("GET", "/v1/starters/no-such-fund", None).await;
+        let (status, body) = call("GET", "/v1/strategies/no-such-fund", None).await;
         assert_eq!(status, StatusCode::NOT_FOUND);
         assert_eq!(body["error"]["code"], "not_found");
     }
 
     #[tokio::test]
-    async fn every_starter_has_an_id_an_address_can_carry_and_one_of_the_five_colours() {
-        for starter in starters() {
-            assert_eq!(page::route(&format!("/s/{}", starter.id)), page::Route::Starter(starter.id.clone()));
+    async fn every_fund_has_an_id_an_address_can_carry_and_one_of_the_five_colours() {
+        for starter in catalogue::entries() {
+            assert_eq!(page::route(&format!("/s/{}", starter.id)), page::Route::Strategy(starter.id.clone()));
             assert!(["blue", "orange", "teal", "violet", "magenta"].contains(&starter.accent.as_str()), "{}: {}", starter.id, starter.accent);
         }
     }
@@ -713,12 +721,14 @@ mod tests {
         assert!(kind.starts_with("text/html"), "{kind}");
         assert!(text.contains("<title>Compounder</title>"));
         assert!(text.contains("Build your own wealth fund."));
-        for starter in starters() {
-            assert!(text.contains(&format!(r#"<a class="card-link" href="/s/{}">{}</a>"#, starter.id, starter.name)), "{}", starter.id);
+        for entry in catalogue::entries() {
+            // The home page leads with the starters. The rest of the catalogue is on Explore.
+            let listed = text.contains(&format!(r#"<a class="card-link" href="/s/{}">{}</a>"#, entry.id, entry.name));
+            assert_eq!(listed, entry.is_starter(), "{}", entry.id);
         }
         // The same answer the app would otherwise have to ask for.
-        let (_, asked) = call("GET", "/v1/starters", None).await;
-        assert_eq!(seed_in(&text)["resources"]["/v1/starters"], asked);
+        let (_, asked) = call("GET", "/v1/strategies", None).await;
+        assert_eq!(seed_in(&text)["resources"]["/v1/strategies"], asked);
         assert!(!text.contains(page::PAGE_PLACE) && !text.contains(page::SEED_PLACE));
     }
 
@@ -730,14 +740,14 @@ mod tests {
         assert!(text.contains(r#"<span class="fund-dot" aria-hidden="true"></span>Hard Assets</h1>"#));
         assert!(text.contains("When a holding drifts 10% from its target"));
         assert!(text.contains("Adding money is not open yet."));
-        let (_, asked) = call("GET", "/v1/starters/hard-assets", None).await;
-        let holdings = asked["starter"]["holdings"].as_array().unwrap();
+        let (_, asked) = call("GET", "/v1/strategies/hard-assets", None).await;
+        let holdings = asked["strategy"]["holdings"].as_array().unwrap();
         assert!(text.contains(&format!(r#"<dt>Holdings</dt><dd><span class="number">{}</span></dd>"#, holdings.len())));
         // One row for each holding, each with its share.
         assert_eq!(text.matches(r#"<li class="row row-asset">"#).count(), holdings.len());
         let largest = page::percent(holdings[0]["weight"].as_f64().unwrap(), false);
         assert!(text.contains(&format!(r#"<span class="number">{largest}</span>"#)), "{largest}");
-        assert_eq!(seed_in(&text)["resources"]["/v1/starters/hard-assets"], asked);
+        assert_eq!(seed_in(&text)["resources"]["/v1/strategies/hard-assets"], asked);
     }
 
     #[tokio::test]
@@ -753,8 +763,27 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn explore_lists_every_fund_and_a_rule_funds_page_says_its_rules() {
+        let (status, _, text) = page("/explore").await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(text.contains("<title>Explore · Compounder</title>"), "{text}");
+        for entry in catalogue::entries() {
+            assert!(text.contains(&format!(r#"<a class="card-link" href="/s/{}">{}</a>"#, entry.id, entry.name)), "{}", entry.id);
+        }
+        let (_, asked) = call("GET", "/v1/strategies", None).await;
+        assert_eq!(seed_in(&text)["resources"]["/v1/strategies"], asked);
+
+        let (status, _, text) = page("/s/trend-switch").await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(text.contains("If SPY&#x27;s price is above its 200-day average price"), "{text}");
+        assert!(text.contains("<dt>Trades</dt><dd>Checked every trading day</dd>"), "{text}");
+        // With no prices there is no test, so the page says nothing of results or holdings.
+        assert!(!text.contains("strategy-results") && !text.contains("strategy-holdings"), "{text}");
+    }
+
+    #[tokio::test]
     async fn an_address_that_matches_nothing_is_the_not_found_page_with_a_404() {
-        for path in ["/nope", "/s/no-such-fund", "/s/", "/s/hard-assets/more", "/s/hard%2Dassets", "/explore"] {
+        for path in ["/nope", "/s/no-such-fund", "/s/", "/s/hard-assets/more", "/s/hard%2Dassets", "/explore/more"] {
             let (status, kind, text) = page(path).await;
             assert_eq!(status, StatusCode::NOT_FOUND, "{path}");
             assert!(kind.starts_with("text/html"), "{path}: {kind}");
@@ -763,7 +792,7 @@ mod tests {
         }
         // The app is told the starter is not there, so it does not ask again.
         let (_, _, text) = page("/s/no-such-fund").await;
-        assert!(seed_in(&text)["resources"]["/v1/starters/no-such-fund"].is_null());
+        assert!(seed_in(&text)["resources"]["/v1/strategies/no-such-fund"].is_null());
         assert_eq!(seed_in(&text)["resources"].as_object().unwrap().len(), 1);
     }
 
@@ -780,7 +809,7 @@ mod tests {
     async fn a_named_event_is_logged_and_anything_else_is_refused() {
         let (status, _) = call("POST", "/v1/events", Some(json!({ "name": "home_seen", "screen": "home" }))).await;
         assert_eq!(status, StatusCode::NO_CONTENT);
-        let (status, _) = call("POST", "/v1/events", Some(json!({ "name": "starter_opened", "screen": "starter", "id": "hard-assets" }))).await;
+        let (status, _) = call("POST", "/v1/events", Some(json!({ "name": "strategy_opened", "screen": "strategy", "id": "hard-assets" }))).await;
         assert_eq!(status, StatusCode::NO_CONTENT);
 
         let refused = [
@@ -788,7 +817,7 @@ mod tests {
             json!({ "name": "home_seen" }),
             json!({ "name": "home_seen", "screen": "" }),
             json!({ "name": "home_seen", "screen": "home\nevent forged" }),
-            json!({ "name": "starter_opened", "screen": "starter", "id": "a b" }),
+            json!({ "name": "strategy_opened", "screen": "strategy", "id": "a b" }),
             json!({ "name": "home_seen", "screen": "home", "email": "someone@example.com" }),
             json!({ "name": "home_seen", "screen": "x".repeat(65) }),
         ];
@@ -805,8 +834,8 @@ mod tests {
 
     #[test]
     fn an_event_is_one_line_with_no_room_for_who() {
-        let event = Event { name: "starter_opened".into(), screen: "starter".into(), id: Some("hard-assets".into()) };
-        assert_eq!(event_line(&event).ok().as_deref(), Some(r#"event {"id":"hard-assets","name":"starter_opened","screen":"starter"}"#));
+        let event = Event { name: "strategy_opened".into(), screen: "strategy".into(), id: Some("hard-assets".into()) };
+        assert_eq!(event_line(&event).ok().as_deref(), Some(r#"event {"id":"hard-assets","name":"strategy_opened","screen":"strategy"}"#));
         let event = Event { name: "home_seen".into(), screen: "home".into(), id: None };
         assert_eq!(event_line(&event).ok().as_deref(), Some(r#"event {"name":"home_seen","screen":"home"}"#));
     }
@@ -840,14 +869,16 @@ mod tests {
             MadeUp { dir }
         }
 
-        /// The same store with a climbing price for every share a token tracks, so each starter can be tested.
-        fn with_every_tracked_share(name: &str) -> MadeUp {
+        /// The same store with a climbing price for every share a fund in the catalogue needs, so each can be tested.
+        fn with_every_share_a_fund_needs(name: &str) -> MadeUp {
             use compounder_prices::{adjust::Bar, store::Store};
             let made = MadeUp::new(name);
             let mut store = Store::open(&made.dir).unwrap();
             let days: Vec<_> = store.find("SPY").unwrap().unwrap().iter().map(|bar| bar.day).collect();
-            for ticker in assets().values().filter_map(|asset| asset.tracks.as_deref()).filter(|ticker| !["SPY", "KO", "NVDA", "TLT"].contains(ticker)) {
-                let bars: Vec<Bar> = days.iter().enumerate().map(|(index, day)| Bar::new(*day, 40.0 + 0.25 * index as f64)).collect();
+            let needed: std::collections::BTreeSet<String> = catalogue::entries().iter().flat_map(|entry| entry.rules.assets()).filter_map(|asset| backtest::ticker(&asset)).collect();
+            for (place, ticker) in needed.iter().filter(|ticker| !["SPY", "KO", "NVDA", "TLT"].contains(&ticker.as_str())).enumerate() {
+                // Each share climbs at its own pace, so a rule that ranks them has something to rank.
+                let bars: Vec<Bar> = days.iter().enumerate().map(|(index, day)| Bar::new(*day, 40.0 + (0.05 + 0.01 * place as f64) * index as f64)).collect();
                 store.save(ticker, &bars).unwrap();
             }
             made
@@ -998,69 +1029,79 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn every_starter_comes_with_the_rule_document_a_backtest_takes() {
-        let (_, body) = call("GET", "/v1/starters", None).await;
-        for starter in body["starters"].as_array().unwrap() {
-            let rules = RuleStrategy::from_document(&starter["rules"]).expect("a sound document");
+    async fn every_fund_comes_with_the_rule_document_a_backtest_takes() {
+        let (_, body) = call("GET", "/v1/strategies", None).await;
+        for starter in body["strategies"].as_array().unwrap() {
+            let rules = compounder_engine::rules::RuleStrategy::from_document(&starter["rules"]).expect("a sound document");
             assert_eq!(rules.name, starter["name"].as_str().unwrap());
             assert!(rules.validate(compounder_engine::rules::MAX_NODES).is_empty());
         }
     }
 
     #[tokio::test]
-    async fn a_starter_carries_what_its_test_came_to_where_there_are_prices() {
-        let store = MadeUp::with_every_tracked_share("figures");
-        let (status, body) = call_with(store.prices(), "GET", "/v1/starters", None).await;
+    async fn a_fund_carries_what_its_test_came_to_where_there_are_prices() {
+        let store = MadeUp::with_every_share_a_fund_needs("figures");
+        let (status, body) = call_with(store.prices(), "GET", "/v1/strategies", None).await;
         assert_eq!(status, StatusCode::OK, "{body}");
-        for starter in body["starters"].as_array().unwrap() {
-            let test = &starter["test"];
-            assert_eq!((test["first_day"].as_str(), test["last_day"].as_str()), (Some("2024-01-01"), Some("2025-02-21")), "{starter}");
+        for strategy in body["strategies"].as_array().unwrap() {
+            let test = &strategy["test"];
+            assert_eq!(test["last_day"], "2025-02-21", "{strategy}");
             assert!(test["per_year"].as_f64().unwrap() > 0.0, "{test}");
             assert!(test["worst_drop"].as_f64().unwrap() >= 0.0, "{test}");
-            assert!(test["sharpe"].is_number() && test["benchmark_per_year"].is_number(), "{test}");
             assert_eq!(test["cost"], 0.0015);
+            if strategy["starter"] == true {
+                // A basket of tokens starts on the store's first day and stands beside the benchmark over the same days.
+                assert_eq!(test["first_day"], "2024-01-01", "{strategy}");
+                assert!(test["sharpe"].is_number() && test["benchmark_per_year"].is_number(), "{test}");
+                assert!(strategy.get("outline").is_none() && strategy["fixed"].is_object(), "{strategy}");
+            } else {
+                // Any other fund says its rules in words and shows what its test held on the last day.
+                assert!(!strategy["outline"].as_array().unwrap().is_empty() && strategy.get("fixed").is_none(), "{strategy}");
+                let held: f64 = strategy["holdings"].as_array().unwrap().iter().map(|holding| holding["weight"].as_f64().unwrap()).sum();
+                assert!((held - 1.0).abs() < 0.01, "{}: holds {held}", strategy["id"]);
+            }
         }
-        let id = body["starters"][0]["id"].as_str().unwrap();
-        let (_, one) = call_with(store.prices(), "GET", &format!("/v1/starters/{id}"), None).await;
-        assert_eq!(one["starter"]["test"], body["starters"][0]["test"]);
+        let id = body["strategies"][0]["id"].as_str().unwrap();
+        let (_, one) = call_with(store.prices(), "GET", &format!("/v1/strategies/{id}"), None).await;
+        assert_eq!(one["strategy"]["test"], body["strategies"][0]["test"]);
         // The page has the figures in its first response as well.
         let request = Request::builder().uri(format!("/s/{id}")).body(Body::empty()).unwrap();
         let page = text_of(unbuilt(store.prices()).oneshot(request).await.unwrap()).await;
-        assert_eq!(seed_in(&page)["resources"][format!("/v1/starters/{id}")]["starter"]["test"], body["starters"][0]["test"]);
+        assert_eq!(seed_in(&page)["resources"][format!("/v1/strategies/{id}")]["strategy"]["test"], body["strategies"][0]["test"]);
     }
 
     #[tokio::test]
-    async fn a_starter_with_no_prices_to_test_it_on_is_listed_without_figures() {
+    async fn a_fund_with_no_prices_to_test_it_on_is_listed_without_figures() {
         for prices in [None, MadeUp::new("untested").prices()] {
-            let (status, body) = call_with(prices, "GET", "/v1/starters", None).await;
+            let (status, body) = call_with(prices, "GET", "/v1/strategies", None).await;
             assert_eq!(status, StatusCode::OK);
-            assert!(body["starters"].as_array().unwrap().iter().all(|starter| starter.get("test").is_none()), "{body}");
+            assert!(body["strategies"].as_array().unwrap().iter().all(|starter| starter.get("test").is_none()), "{body}");
         }
     }
 
     #[tokio::test]
-    async fn a_starters_whole_test_is_served_for_its_chart() {
-        let store = MadeUp::with_every_tracked_share("series");
-        let id = &starters()[0].id;
-        let (status, body) = call_with(store.prices(), "GET", &format!("/v1/starters/{id}/test"), None).await;
+    async fn a_funds_whole_test_is_served_for_its_chart() {
+        let store = MadeUp::with_every_share_a_fund_needs("series");
+        let id = &catalogue::entries()[0].id;
+        let (status, body) = call_with(store.prices(), "GET", &format!("/v1/strategies/{id}/test"), None).await;
         assert_eq!(status, StatusCode::OK, "{body}");
         assert_eq!(body["days"].as_array().unwrap().len(), 300);
         assert_eq!(body["values"].as_array().unwrap().len(), 300);
         assert_eq!(body["benchmark"]["values"].as_array().unwrap().len(), 300);
         assert_eq!((body["benchmark"]["symbol"].as_str(), body["slippage"].as_f64()), (Some("SPY"), Some(0.0015)));
 
-        let (status, body) = call_with(store.prices(), "GET", "/v1/starters/no-such-fund/test", None).await;
+        let (status, body) = call_with(store.prices(), "GET", "/v1/strategies/no-such-fund/test", None).await;
         assert_eq!((status, body["error"]["code"].as_str()), (StatusCode::NOT_FOUND, Some("not_found")));
-        let (status, body) = call("GET", &format!("/v1/starters/{id}/test"), None).await;
+        let (status, body) = call("GET", &format!("/v1/strategies/{id}/test"), None).await;
         assert_eq!((status, body["error"]["code"].as_str()), (StatusCode::SERVICE_UNAVAILABLE, Some("unavailable")));
-        let (status, body) = call_with(MadeUp::new("series-short").prices(), "GET", &format!("/v1/starters/{id}/test"), None).await;
+        let (status, body) = call_with(MadeUp::new("series-short").prices(), "GET", &format!("/v1/strategies/{id}/test"), None).await;
         assert_eq!((status, body["error"]["code"].as_str()), (StatusCode::SERVICE_UNAVAILABLE, Some("unavailable")));
     }
 
     #[tokio::test]
     async fn an_answer_is_sent_compressed_to_a_browser_that_asks() {
         let request = |encoding: Option<&str>| {
-            let mut request = Request::builder().uri("/v1/starters");
+            let mut request = Request::builder().uri("/v1/strategies");
             if let Some(encoding) = encoding {
                 request = request.header(header::ACCEPT_ENCODING, encoding);
             }
@@ -1084,8 +1125,8 @@ mod tests {
     async fn a_real_store_runs_every_starter_and_a_rule_strategy() {
         let Some(dir) = std::env::var_os("PRICE_STORE") else { return };
         let prices = Some(Arc::new(Prices::at(dir)));
-        let (_, starters) = call("GET", "/v1/starters", None).await;
-        let mut strategies: Vec<Value> = starters["starters"].as_array().unwrap().iter().map(|starter| starter["rules"].clone()).collect();
+        let (_, starters) = call("GET", "/v1/strategies", None).await;
+        let mut strategies: Vec<Value> = starters["strategies"].as_array().unwrap().iter().map(|starter| starter["rules"].clone()).collect();
         // Hold the fast fund while the broad one is above its 200 day average and not overbought, else bills.
         let reading = |indicator: &str, window: u32, symbol: &str| json!({ "indicator": indicator, "window": window, "asset": { "market": "equities", "symbol": symbol } });
         strategies.push(json!({ "name": "Trend with a brake", "rebalance": { "type": "calendar", "frequency": "daily" }, "root": { "block": "if",

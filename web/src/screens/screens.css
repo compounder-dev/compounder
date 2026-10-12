@@ -1,6 +1,6 @@
 /* The screens: how the parts are laid out on each one. Values come from tokens.css only. */
 
-/* ---- the starter list ---- */
+/* ---- the strategy list ---- */
 
 .cards {
   display: grid;
@@ -81,6 +81,30 @@
   margin-top: var(--space-4);
 }
 
+/* The way on from the few funds here to all of them. */
+.more-link {
+  margin-top: var(--space-6);
+}
+
+/* ---- explore ---- */
+
+.explore-tools {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-3);
+  max-width: var(--size-reading-max);
+  margin-top: var(--space-6);
+}
+
+.explore-tools .field {
+  justify-self: stretch;
+}
+
+.explore-tools ~ .cards,
+.explore-tools ~ .region-notice {
+  margin-top: var(--space-6);
+}
+
 /* ---- pricing ---- */
 
 .plans {
@@ -127,25 +151,25 @@
   letter-spacing: var(--type-small-tracking);
 }
 
-/* ---- one starter ---- */
+/* ---- one strategy ---- */
 
 .back-link {
   margin: calc(var(--space-3) * -1) 0 var(--space-2);
 }
 
-.starter {
+.strategy {
   display: grid;
   gap: var(--section-gap);
 }
 
-.starter-head .page-title {
+.strategy-head .page-title {
   display: flex;
   align-items: flex-start;
   gap: var(--space-3);
 }
 
 /* The dot sits on the middle of the first line of the name. */
-.starter-head .fund-dot {
+.strategy-head .fund-dot {
   width: var(--space-4);
   height: var(--space-4);
   margin-top: var(--space-3);
@@ -173,14 +197,14 @@
   text-wrap: balance;
 }
 
-.starter-note {
+.strategy-note {
   margin-top: var(--space-4);
   color: var(--text-muted);
   font: var(--type-small);
   letter-spacing: var(--type-small-tracking);
 }
 
-.starter-results {
+.strategy-results {
   display: grid;
   gap: var(--space-6);
   min-width: 0;
@@ -222,7 +246,11 @@
   max-width: var(--size-reading-max);
 }
 
-.starter-holdings .rows {
+.strategy-rules .outline {
+  margin-top: var(--space-4);
+}
+
+.strategy-holdings .rows {
   margin-top: var(--space-4);
 }
 
@@ -290,7 +318,7 @@
 }
 
 /* On a phone the name needs the room. The share is still there as a number. */
-.starter-holdings .bar {
+.strategy-holdings .bar {
   display: none;
 }
 
@@ -303,7 +331,7 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .starter-holdings .bar {
+  .strategy-holdings .bar {
     display: block;
   }
 }
@@ -322,32 +350,22 @@
     max-width: none;
   }
 
-  /* Words and holdings on the left, the facts in a card that stays in view on the right. */
-  .starter {
+  /* Words, results, rules and holdings down the left. The facts in a card that stays in view on the right. */
+  .strategy {
     grid-template-columns: minmax(0, 1fr) minmax(0, calc(var(--size-sheet-max) - var(--space-16)));
-    grid-template-areas:
-      'head facts'
-      'results facts'
-      'holdings facts';
     column-gap: var(--space-12);
     align-items: start;
   }
 
-  .starter-head {
-    grid-area: head;
+  .strategy > * {
+    grid-column: 1;
   }
 
-  .starter-facts {
-    grid-area: facts;
+  /* A fund has at most four parts on the left, and the card stands beside them all. */
+  .strategy-facts {
+    grid-column: 2;
+    grid-row: 1 / span 4;
     position: sticky;
     top: var(--space-6);
-  }
-
-  .starter-results {
-    grid-area: results;
-  }
-
-  .starter-holdings {
-    grid-area: holdings;
   }
 }

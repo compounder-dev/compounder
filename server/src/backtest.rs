@@ -24,7 +24,7 @@ use compounder_prices::{calendar::Calendar, day::Day};
 use serde_json::{json, Value};
 
 use crate::{
-    assets,
+    assets, catalogue,
     prices::{Listing, Prices},
     ApiError,
 };
@@ -97,7 +97,7 @@ impl Ask {
 
 /// The ticker whose price history stands for an asset, when there is one: a
 /// listed share's own symbol, or the share a token tracks.
-fn ticker(asset: &Held) -> Option<String> {
+pub(crate) fn ticker(asset: &Held) -> Option<String> {
     match asset {
         Held::Listed { market: Market::Equities, symbol } => Some(symbol.clone()),
         Held::Listed { .. } => None,
@@ -108,7 +108,7 @@ fn ticker(asset: &Held) -> Option<String> {
 /// An asset with what the app shows for it.
 fn described(asset: &Held) -> Value {
     let (symbol, name) = match asset {
-        Held::Listed { symbol, .. } => (Some(symbol.clone()), None),
+        Held::Listed { symbol, .. } => (Some(symbol.clone()), catalogue::listed_name(symbol).map(str::to_string)),
         Held::Token { id } => {
             let known = assets().get(id);
             (known.map(|token| token.symbol.clone()), known.map(|token| token.name.clone()))

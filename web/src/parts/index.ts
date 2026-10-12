@@ -12,3 +12,4 @@ export { Sheet } from './Sheet.tsx';
 export { Segmented } from './Segmented.tsx';
 export { StatBand } from './StatBand.tsx';
 export { LineChart, type ChartLine } from './LineChart.tsx';
+export { Field } from './Field.tsx';

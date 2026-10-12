@@ -29,13 +29,30 @@ export type TestFigures = {
   cost: number;
 };
 
-export type Starter = {
+/** One line of a strategy's rules, in the server's words. An asset line is its ticker, with its name and share. */
+export type OutlineLine = {
+  depth: number;
+  kind: 'split' | 'pick' | 'if' | 'condition' | 'then' | 'else' | 'asset';
+  text: string;
+  name?: string;
+  share?: number;
+};
+
+export type Strategy = {
   id: string;
   name: string;
   summary: string;
   accent: string;
-  /** The full strategy document. Only the trading settings are read here; the engine reads the rest. */
-  strategy: { tradingSettings: { type: 'threshold'; triggerPercentage: number } | { type: 'calendar'; frequency: string } };
+    /** A basket holds named assets in set shares. What a rules fund holds follows from prices. */
+  kind: 'basket' | 'rules';
+  /** One of the funds the home page leads with. */
+  starter: boolean;
+  /** The fixed document a browser can check the holdings against. Only a starter has one. */
+  fixed?: unknown;
+  /** When it trades, in the server's words. */
+  trades: string;
+  /** Its rules in plain words. A starter has none: what it holds is all its rules say. */
+  outline?: OutlineLine[];
   /** Absent where the server has no prices to test the strategy on. */
   test?: TestFigures;
   holdings: Holding[];
@@ -51,9 +68,9 @@ export type TestSeries = {
   benchmark: { symbol: string; values: (number | null)[] } | null;
 };
 
-export const STARTERS = '/v1/starters';
-export const starterPath = (id: string) => `${STARTERS}/${id}`;
-export const starterTestPath = (id: string) => `${STARTERS}/${id}/test`;
+export const STRATEGIES = '/v1/strategies';
+export const strategyPath = (id: string) => `${STRATEGIES}/${id}`;
+export const strategyTestPath = (id: string) => `${STRATEGIES}/${id}/test`;
 
 const LOADING: Loaded<unknown> = { state: 'loading' };
 const entries = new Map<string, Loaded<unknown>>();
@@ -62,9 +79,9 @@ const listeners = new Set<() => void>();
 
 function put(path: string, entry: Loaded<unknown>) {
   entries.set(path, entry);
-  // The list carries every starter in full, so opening one from the list needs no second request.
-  if (path === STARTERS && entry.state === 'ready') {
-    for (const starter of (entry.data as { starters: Starter[] }).starters) entries.set(starterPath(starter.id), { state: 'ready', data: { starter } });
+  // The list carries every strategy in full, so opening one from the list needs no second request.
+  if (path === STRATEGIES && entry.state === 'ready') {
+    for (const strategy of (entry.data as { strategies: Strategy[] }).strategies) entries.set(strategyPath(strategy.id), { state: 'ready', data: { strategy } });
   }
   listeners.forEach((listener) => listener());
 }
@@ -72,13 +89,13 @@ function put(path: string, entry: Loaded<unknown>) {
 /** Whether a body has the shape its path promises. A wrong shape is a failure, never a crash later. */
 function understood(path: string, body: unknown): boolean {
   if (typeof body !== 'object' || body === null) return false;
-  if (path === STARTERS) return Array.isArray((body as { starters?: unknown }).starters);
-  if (/^\/v1\/starters\/[^/]+\/test$/.test(path)) {
+  if (path === STRATEGIES) return Array.isArray((body as { strategies?: unknown }).strategies);
+  if (/^\/v1\/strategies\/[^/]+\/test$/.test(path)) {
     const { days, values } = body as { days?: unknown; values?: unknown };
     return Array.isArray(days) && Array.isArray(values) && days.length === values.length && days.length > 0;
   }
-  const { starter } = body as { starter?: unknown };
-  return typeof starter === 'object' && starter !== null;
+  const { strategy } = body as { strategy?: unknown };
+  return typeof strategy === 'object' && strategy !== null;
 }
 
 /** Take the answers the server put in the page. `null` means the server said there is no such thing. */
@@ -134,18 +151,18 @@ function useResource(path: string): [Loaded<unknown>, () => void] {
   return [entry, () => void load(path, true)];
 }
 
-export function useStarters(): [Loaded<Starter[]>, () => void] {
-  const [entry, again] = useResource(STARTERS);
-  return [entry.state === 'ready' ? { state: 'ready', data: (entry.data as { starters: Starter[] }).starters } : entry, again];
+export function useStrategies(): [Loaded<Strategy[]>, () => void] {
+  const [entry, again] = useResource(STRATEGIES);
+  return [entry.state === 'ready' ? { state: 'ready', data: (entry.data as { strategies: Strategy[] }).strategies } : entry, again];
 }
 
-export function useStarter(id: string): [Loaded<Starter>, () => void] {
-  const [entry, again] = useResource(starterPath(id));
-  return [entry.state === 'ready' ? { state: 'ready', data: (entry.data as { starter: Starter }).starter } : entry, again];
+export function useStrategy(id: string): [Loaded<Strategy>, () => void] {
+  const [entry, again] = useResource(strategyPath(id));
+  return [entry.state === 'ready' ? { state: 'ready', data: (entry.data as { strategy: Strategy }).strategy } : entry, again];
 }
 
-export function useStarterTest(id: string): [Loaded<TestSeries>, () => void] {
-  const [entry, again] = useResource(starterTestPath(id));
+export function useStrategyTest(id: string): [Loaded<TestSeries>, () => void] {
+  const [entry, again] = useResource(strategyTestPath(id));
   return [entry as Loaded<TestSeries>, again];
 }
 

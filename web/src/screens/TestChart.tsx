@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useStarterTest, type TestSeries } from '../api.ts';
+import { useStrategyTest, type TestSeries } from '../api.ts';
 import { formatPercent } from '../format.ts';
 import { Banner, Button, LineChart, Segmented, type ChartLine } from '../parts/index.ts';
 import { byYear, changes, startOf } from '../parts/chart.ts';
@@ -66,7 +66,7 @@ function Ready({ test }: { test: TestSeries }) {
 
 /** A fund's test as a chart, fetched after the page: the figures above it arrived with the page. */
 export function TestChart({ id }: { id: string }) {
-  const [test, again] = useStarterTest(id);
+  const [test, again] = useStrategyTest(id);
   if (test.state === 'ready') return <Ready test={test.data} />;
   if (test.state === 'loading') {
     return (

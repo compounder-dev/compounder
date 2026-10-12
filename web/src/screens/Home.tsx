@@ -1,57 +1,13 @@
-import { useStarters, type Starter, type TestFigures } from '../api.ts';
+import { useStrategies } from '../api.ts';
 import { useEvent } from '../events.ts';
-import { Banner, Button, Card, CardSkeleton, CardTitle, EmptyState, Link, Number } from '../parts/index.ts';
-import { PRICING, starterAddress, useTitle } from '../route.ts';
-import { asFall, changeTone, fundColour, holdsLine, yearOf } from '../starter.ts';
+import { Banner, Button, CardSkeleton, EmptyState, Link } from '../parts/index.ts';
+import { EXPLORE, PRICING, useTitle } from '../route.ts';
+import { StrategyCard } from './StrategyCard.tsx';
 
-/** The three figures of a test that a card can carry. Each says what it is, and the first says it was tested. */
-function Figures({ test }: { test: TestFigures }) {
-  return (
-    <dl className="card-figures">
-      <div>
-        <dt>Per year, tested</dt>
-        <dd>
-          <Number kind="percent" value={test.per_year} tone={changeTone(test.per_year)} sign />
-        </dd>
-      </div>
-      <div>
-        <dt>Worst drop</dt>
-        <dd>
-          <Number kind="percent" value={asFall(test.worst_drop)} />
-        </dd>
-      </div>
-      <div>
-        <dt>Tested since</dt>
-        <dd>
-          <span className="number">{yearOf(test.first_day)}</span>
-        </dd>
-      </div>
-    </dl>
-  );
-}
-
-function StarterCard({ starter }: { starter: Starter }) {
-  return (
-    <Card variant="strategy" as="li" fund={fundColour(starter.accent)}>
-      <CardTitle href={starterAddress(starter.id)} dot>
-        {starter.name}
-      </CardTitle>
-      <p className="card-summary">{starter.summary}</p>
-      <dl className="card-facts">
-        <div>
-          <dt>Holds</dt>
-          <dd>{holdsLine(starter.holdings)}</dd>
-        </div>
-      </dl>
-      {starter.test && <Figures test={starter.test} />}
-    </Card>
-  );
-}
-
-/** The starter list in its four states: on its way, none, failed, here. */
-function Starters() {
-  const [starters, again] = useStarters();
-  if (starters.state === 'loading') {
+/** The strategy list in its four states: on its way, none, failed, here. */
+function Strategies() {
+  const [strategies, again] = useStrategies();
+  if (strategies.state === 'loading') {
     return (
       <ul className="cards" role="list" aria-busy="true" aria-label="Loading funds">
         {[0, 1, 2].map((n) => (
@@ -60,7 +16,7 @@ function Starters() {
       </ul>
     );
   }
-  if (starters.state !== 'ready') {
+  if (strategies.state !== 'ready') {
     return (
       <div className="region-notice">
         <Banner variant="error" action={<Button onClick={again}>Try again</Button>}>
@@ -69,7 +25,9 @@ function Starters() {
       </div>
     );
   }
-  if (starters.data.length === 0) {
+  // The home page leads with the few funds a person can begin with. The rest are on Explore.
+  const starters = strategies.data.filter((strategy) => strategy.starter);
+  if (starters.length === 0) {
     return (
       <div className="region-notice">
         <EmptyState action={<Button onClick={again}>Look again</Button>}>There are no funds to choose from yet.</EmptyState>
@@ -77,11 +35,18 @@ function Starters() {
     );
   }
   return (
-    <ul className="cards" role="list">
-      {starters.data.map((starter) => (
-        <StarterCard key={starter.id} starter={starter} />
-      ))}
-    </ul>
+    <>
+      <ul className="cards" role="list">
+        {starters.map((strategy) => (
+          <StrategyCard key={strategy.id} strategy={strategy} />
+        ))}
+      </ul>
+      <p className="more-link">
+        <Link href={EXPLORE} variant="standalone" icon="search">
+          Explore all funds
+        </Link>
+      </p>
+    </>
   );
 }
 
@@ -96,7 +61,7 @@ export function Home() {
         Free to build and test. Your first fund is free to run. More funds are $20 a month. <Link href={PRICING}>See pricing</Link>
       </p>
       <h2 className="section-title cards-title">Start from one of these</h2>
-      <Starters />
+      <Strategies />
     </>
   );
 }

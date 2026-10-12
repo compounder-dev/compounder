@@ -3,14 +3,16 @@
   "name": "home",
   "address": "/",
   "resources": {
-   "/v1/starters": {
-    "starters": [
+   "/v1/strategies": {
+    "strategies": [
      {
       "id": "six-makers",
       "name": "Six Makers",
       "summary": "Six companies that make things, with the first one weighted most.",
       "accent": "orange",
-      "strategy": {
+      "kind": "basket",
+      "starter": true,
+      "fixed": {
        "entry": {
         "blockType": "topLevel",
         "name": "Six Makers",
@@ -75,6 +77,7 @@
         "triggerPercentage": 7.5
        }
       },
+      "trades": "When a holding drifts 7.5% from its target",
       "test": {
        "first_day": "2012-05-18",
        "last_day": "2026-10-09",
@@ -128,7 +131,9 @@
       "name": "Salt & <Steel> \"Co\"",
       "summary": "It's a test of 'quotes', <tags> & ampersands.",
       "accent": "green",
-      "strategy": {
+      "kind": "basket",
+      "starter": true,
+      "fixed": {
        "entry": {
         "blockType": "topLevel",
         "name": "Odd",
@@ -179,6 +184,7 @@
         "frequency": "weekly"
        }
       },
+      "trades": "Every week",
       "test": {
        "first_day": "2021-01-04",
        "last_day": "2026-10-09",
@@ -214,6 +220,70 @@
         "weight": 0
        }
       ]
+     },
+     {
+      "id": "trend-switch",
+      "name": "Trend Switch",
+      "summary": "Holds the S&P 500 while it is above its 200-day average, and bills while it is below.",
+      "accent": "orange",
+      "kind": "rules",
+      "starter": false,
+      "rules": {
+       "name": "Trend Switch",
+       "rebalance": {
+        "type": "calendar",
+        "frequency": "daily"
+       },
+       "root": {
+        "block": "asset",
+        "asset": {
+         "market": "equities",
+         "symbol": "SPY"
+        }
+       }
+      },
+      "trades": "Every trading day",
+      "outline": [
+       {
+        "depth": 0,
+        "kind": "if",
+        "text": "If SPY's price is above its 200-day average price"
+       },
+       {
+        "depth": 1,
+        "kind": "asset",
+        "text": "SPY",
+        "name": "S&P 500"
+       },
+       {
+        "depth": 0,
+        "kind": "else",
+        "text": "Otherwise"
+       },
+       {
+        "depth": 1,
+        "kind": "asset",
+        "text": "BIL",
+        "name": "Short-term US government bills"
+       }
+      ],
+      "test": {
+       "first_day": "2007-05-30",
+       "last_day": "2026-10-09",
+       "per_year": 0.0712,
+       "worst_drop": 0.2391,
+       "sharpe": 0.63,
+       "benchmark_per_year": 0.1081,
+       "cost": 0.0015
+      },
+      "holdings": [
+       {
+        "asset_id": "SPY",
+        "symbol": "SPY",
+        "name": "S&P 500",
+        "weight": 1
+       }
+      ]
      }
     ]
    }
@@ -223,22 +293,24 @@
   "name": "home-empty",
   "address": "/",
   "resources": {
-   "/v1/starters": {
-    "starters": []
+   "/v1/strategies": {
+    "strategies": []
    }
   }
  },
  {
-  "name": "starter",
+  "name": "strategy",
   "address": "/s/six-makers",
   "resources": {
-   "/v1/starters/six-makers": {
-    "starter": {
+   "/v1/strategies/six-makers": {
+    "strategy": {
      "id": "six-makers",
      "name": "Six Makers",
      "summary": "Six companies that make things, with the first one weighted most.",
      "accent": "orange",
-     "strategy": {
+     "kind": "basket",
+     "starter": true,
+     "fixed": {
       "entry": {
        "blockType": "topLevel",
        "name": "Six Makers",
@@ -303,6 +375,7 @@
        "triggerPercentage": 7.5
       }
      },
+     "trades": "When a holding drifts 7.5% from its target",
      "test": {
       "first_day": "2012-05-18",
       "last_day": "2026-10-09",
@@ -355,16 +428,18 @@
   }
  },
  {
-  "name": "starter-odd",
+  "name": "strategy-odd",
   "address": "/s/odd_one-2",
   "resources": {
-   "/v1/starters/odd_one-2": {
-    "starter": {
+   "/v1/strategies/odd_one-2": {
+    "strategy": {
      "id": "odd_one-2",
      "name": "Salt & <Steel> \"Co\"",
      "summary": "It's a test of 'quotes', <tags> & ampersands.",
      "accent": "green",
-     "strategy": {
+     "kind": "basket",
+     "starter": true,
+     "fixed": {
       "entry": {
        "blockType": "topLevel",
        "name": "Odd",
@@ -415,6 +490,7 @@
        "frequency": "weekly"
       }
      },
+     "trades": "Every week",
      "test": {
       "first_day": "2025-11-03",
       "last_day": "2026-10-09",
@@ -455,10 +531,10 @@
   }
  },
  {
-  "name": "starter-missing",
+  "name": "strategy-missing",
   "address": "/s/gone",
   "resources": {
-   "/v1/starters/gone": null
+   "/v1/strategies/gone": null
   }
  },
  {
@@ -479,16 +555,18 @@
   "broke": true
  },
  {
-  "name": "starter-untested",
+  "name": "strategy-untested",
   "address": "/s/six-makers",
   "resources": {
-   "/v1/starters/six-makers": {
-    "starter": {
+   "/v1/strategies/six-makers": {
+    "strategy": {
      "id": "six-makers",
      "name": "Six Makers",
      "summary": "Six companies that make things, with the first one weighted most.",
      "accent": "orange",
-     "strategy": {
+     "kind": "basket",
+     "starter": true,
+     "fixed": {
       "entry": {
        "blockType": "topLevel",
        "name": "Six Makers",
@@ -553,6 +631,7 @@
        "triggerPercentage": 7.5
       }
      },
+     "trades": "When a holding drifts 7.5% from its target",
      "holdings": [
       {
        "asset_id": "0x0000000000000000000000000000000000000001:56",
@@ -599,5 +678,556 @@
   "name": "pricing",
   "address": "/pricing",
   "resources": {}
+ },
+ {
+  "name": "explore",
+  "address": "/explore",
+  "resources": {
+   "/v1/strategies": {
+    "strategies": [
+     {
+      "id": "six-makers",
+      "name": "Six Makers",
+      "summary": "Six companies that make things, with the first one weighted most.",
+      "accent": "orange",
+      "kind": "basket",
+      "starter": true,
+      "fixed": {
+       "entry": {
+        "blockType": "topLevel",
+        "name": "Six Makers",
+        "blockIdForInstance": "six-top",
+        "parentNodeId": "root",
+        "children": {
+         "blockType": "weight",
+         "weightType": "equal",
+         "weightings": [
+          "0",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0"
+         ],
+         "blockIdForInstance": "six-weights",
+         "parentNodeId": "six-top",
+         "children": [
+          {
+           "blockType": "asset",
+           "assetId": "0x0000000000000000000000000000000000000001:56",
+           "blockIdForInstance": "six-0",
+           "parentNodeId": "six-weights"
+          },
+          {
+           "blockType": "asset",
+           "assetId": "0x0000000000000000000000000000000000000002:56",
+           "blockIdForInstance": "six-1",
+           "parentNodeId": "six-weights"
+          },
+          {
+           "blockType": "asset",
+           "assetId": "0x0000000000000000000000000000000000000003:56",
+           "blockIdForInstance": "six-2",
+           "parentNodeId": "six-weights"
+          },
+          {
+           "blockType": "asset",
+           "assetId": "0x0000000000000000000000000000000000000004:56",
+           "blockIdForInstance": "six-3",
+           "parentNodeId": "six-weights"
+          },
+          {
+           "blockType": "asset",
+           "assetId": "0x0000000000000000000000000000000000000005:56",
+           "blockIdForInstance": "six-4",
+           "parentNodeId": "six-weights"
+          },
+          {
+           "blockType": "asset",
+           "assetId": "0x0000000000000000000000000000000000000006:56",
+           "blockIdForInstance": "six-5",
+           "parentNodeId": "six-weights"
+          }
+         ]
+        }
+       },
+       "version": "1.0.0",
+       "tradingSettings": {
+        "type": "threshold",
+        "triggerPercentage": 7.5
+       }
+      },
+      "trades": "When a holding drifts 7.5% from its target",
+      "test": {
+       "first_day": "2012-05-18",
+       "last_day": "2026-10-09",
+       "per_year": 0.3608,
+       "worst_drop": 0.5031,
+       "sharpe": 1.118,
+       "benchmark_per_year": 0.1529,
+       "cost": 0.0015
+      },
+      "holdings": [
+       {
+        "asset_id": "0x0000000000000000000000000000000000000001:56",
+        "symbol": "AAAon",
+        "name": "Alpha Works (Tokenized)",
+        "weight": 0.4
+       },
+       {
+        "asset_id": "0x0000000000000000000000000000000000000002:56",
+        "symbol": "BBBon",
+        "name": "Beta Mills (Tokenized)",
+        "weight": 0.2
+       },
+       {
+        "asset_id": "0x0000000000000000000000000000000000000003:56",
+        "symbol": "CCCon",
+        "name": "Gamma Tools (Tokenized)",
+        "weight": 0.142857142857
+       },
+       {
+        "asset_id": "0x0000000000000000000000000000000000000004:56",
+        "symbol": "DDDon",
+        "name": "Delta Parts (Tokenized)",
+        "weight": 0.125
+       },
+       {
+        "asset_id": "0x0000000000000000000000000000000000000005:56",
+        "symbol": "EEEon",
+        "name": "Epsilon Forge (Tokenized)",
+        "weight": 0.0875
+       },
+       {
+        "asset_id": "0x0000000000000000000000000000000000000006:56",
+        "symbol": "FFFon",
+        "name": "Zeta Line (Tokenized)",
+        "weight": 0.044642857143
+       }
+      ]
+     },
+     {
+      "id": "odd_one-2",
+      "name": "Salt & <Steel> \"Co\"",
+      "summary": "It's a test of 'quotes', <tags> & ampersands.",
+      "accent": "green",
+      "kind": "basket",
+      "starter": true,
+      "fixed": {
+       "entry": {
+        "blockType": "topLevel",
+        "name": "Odd",
+        "blockIdForInstance": "odd-top",
+        "parentNodeId": "root",
+        "children": {
+         "blockType": "weight",
+         "weightType": "equal",
+         "weightings": [
+          "0",
+          "0",
+          "0",
+          "0"
+         ],
+         "blockIdForInstance": "odd-weights",
+         "parentNodeId": "odd-top",
+         "children": [
+          {
+           "blockType": "asset",
+           "assetId": "0x000000000000000000000000000000000000000b:56",
+           "blockIdForInstance": "odd-0",
+           "parentNodeId": "odd-weights"
+          },
+          {
+           "blockType": "asset",
+           "assetId": "0x000000000000000000000000000000000000000c:56",
+           "blockIdForInstance": "odd-1",
+           "parentNodeId": "odd-weights"
+          },
+          {
+           "blockType": "asset",
+           "assetId": "0x000000000000000000000000000000000000000d:56",
+           "blockIdForInstance": "odd-2",
+           "parentNodeId": "odd-weights"
+          },
+          {
+           "blockType": "asset",
+           "assetId": "0x000000000000000000000000000000000000000e:56",
+           "blockIdForInstance": "odd-3",
+           "parentNodeId": "odd-weights"
+          }
+         ]
+        }
+       },
+       "version": "1.0.0",
+       "tradingSettings": {
+        "type": "calendar",
+        "frequency": "weekly"
+       }
+      },
+      "trades": "Every week",
+      "test": {
+       "first_day": "2021-01-04",
+       "last_day": "2026-10-09",
+       "per_year": -0.0421,
+       "worst_drop": 0.31,
+       "sharpe": -0.2,
+       "benchmark_per_year": 0.1,
+       "cost": 0.003
+      },
+      "holdings": [
+       {
+        "asset_id": "0x000000000000000000000000000000000000000b:56",
+        "symbol": "GLDon",
+        "name": "Gold & Sons (Tokenized)",
+        "weight": 0.99875
+       },
+       {
+        "asset_id": "0x000000000000000000000000000000000000000c:56",
+        "symbol": "Éon",
+        "name": "École <Nord>",
+        "weight": 0.00125
+       },
+       {
+        "asset_id": "0x000000000000000000000000000000000000000d:56",
+        "symbol": null,
+        "name": null,
+        "weight": 4e-05
+       },
+       {
+        "asset_id": "0x000000000000000000000000000000000000000e:56",
+        "symbol": "ZERO",
+        "name": "Nothing Yet",
+        "weight": 0
+       }
+      ]
+     },
+     {
+      "id": "trend-switch",
+      "name": "Trend Switch",
+      "summary": "Holds the S&P 500 while it is above its 200-day average, and bills while it is below.",
+      "accent": "orange",
+      "kind": "rules",
+      "starter": false,
+      "rules": {
+       "name": "Trend Switch",
+       "rebalance": {
+        "type": "calendar",
+        "frequency": "daily"
+       },
+       "root": {
+        "block": "asset",
+        "asset": {
+         "market": "equities",
+         "symbol": "SPY"
+        }
+       }
+      },
+      "trades": "Every trading day",
+      "outline": [
+       {
+        "depth": 0,
+        "kind": "if",
+        "text": "If SPY's price is above its 200-day average price"
+       },
+       {
+        "depth": 1,
+        "kind": "asset",
+        "text": "SPY",
+        "name": "S&P 500"
+       },
+       {
+        "depth": 0,
+        "kind": "else",
+        "text": "Otherwise"
+       },
+       {
+        "depth": 1,
+        "kind": "asset",
+        "text": "BIL",
+        "name": "Short-term US government bills"
+       }
+      ],
+      "test": {
+       "first_day": "2007-05-30",
+       "last_day": "2026-10-09",
+       "per_year": 0.0712,
+       "worst_drop": 0.2391,
+       "sharpe": 0.63,
+       "benchmark_per_year": 0.1081,
+       "cost": 0.0015
+      },
+      "holdings": [
+       {
+        "asset_id": "SPY",
+        "symbol": "SPY",
+        "name": "S&P 500",
+        "weight": 1
+       }
+      ]
+     },
+     {
+      "id": "mixed-bag",
+      "name": "Mixed <Bag> & \"Co\"",
+      "summary": "Every kind of line a strategy's rules can have.",
+      "accent": "violet",
+      "kind": "rules",
+      "starter": false,
+      "trades": "Every month",
+      "outline": [
+       {
+        "depth": 0,
+        "kind": "split",
+        "text": "Safe side: split in set shares between"
+       },
+       {
+        "depth": 1,
+        "kind": "asset",
+        "text": "VTI",
+        "name": "US stock market",
+        "share": 0.6
+       },
+       {
+        "depth": 1,
+        "kind": "asset",
+        "text": "ZZZZ",
+        "share": 0.075
+       },
+       {
+        "depth": 1,
+        "kind": "if",
+        "text": "If all of these are true"
+       },
+       {
+        "depth": 2,
+        "kind": "condition",
+        "text": "QQQ's price is above its 200-day average price"
+       },
+       {
+        "depth": 2,
+        "kind": "condition",
+        "text": "Any of these is true"
+       },
+       {
+        "depth": 3,
+        "kind": "condition",
+        "text": "QQQ's 10-day relative strength is below 80%"
+       },
+       {
+        "depth": 1,
+        "kind": "then",
+        "text": "Then"
+       },
+       {
+        "depth": 2,
+        "kind": "pick",
+        "text": "Of these, hold the 2 with the highest 126-day return"
+       },
+       {
+        "depth": 3,
+        "kind": "asset",
+        "text": "XLK",
+        "name": "Tech & <things>"
+       },
+       {
+        "depth": 3,
+        "kind": "asset",
+        "text": "XLE",
+        "name": "Energy"
+       },
+       {
+        "depth": 1,
+        "kind": "else",
+        "text": "Otherwise"
+       },
+       {
+        "depth": 2,
+        "kind": "asset",
+        "text": "BIL",
+        "name": "Short-term US government bills"
+       }
+      ],
+      "holdings": []
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "explore-empty",
+  "address": "/explore",
+  "resources": {
+   "/v1/strategies": {
+    "strategies": []
+   }
+  }
+ },
+ {
+  "name": "strategy-rules",
+  "address": "/s/trend-switch",
+  "resources": {
+   "/v1/strategies/trend-switch": {
+    "strategy": {
+     "id": "trend-switch",
+     "name": "Trend Switch",
+     "summary": "Holds the S&P 500 while it is above its 200-day average, and bills while it is below.",
+     "accent": "orange",
+     "kind": "rules",
+     "starter": false,
+     "rules": {
+      "name": "Trend Switch",
+      "rebalance": {
+       "type": "calendar",
+       "frequency": "daily"
+      },
+      "root": {
+       "block": "asset",
+       "asset": {
+        "market": "equities",
+        "symbol": "SPY"
+       }
+      }
+     },
+     "trades": "Every trading day",
+     "outline": [
+      {
+       "depth": 0,
+       "kind": "if",
+       "text": "If SPY's price is above its 200-day average price"
+      },
+      {
+       "depth": 1,
+       "kind": "asset",
+       "text": "SPY",
+       "name": "S&P 500"
+      },
+      {
+       "depth": 0,
+       "kind": "else",
+       "text": "Otherwise"
+      },
+      {
+       "depth": 1,
+       "kind": "asset",
+       "text": "BIL",
+       "name": "Short-term US government bills"
+      }
+     ],
+     "test": {
+      "first_day": "2007-05-30",
+      "last_day": "2026-10-09",
+      "per_year": 0.0712,
+      "worst_drop": 0.2391,
+      "sharpe": 0.63,
+      "benchmark_per_year": 0.1081,
+      "cost": 0.0015
+     },
+     "holdings": [
+      {
+       "asset_id": "SPY",
+       "symbol": "SPY",
+       "name": "S&P 500",
+       "weight": 1
+      }
+     ]
+    }
+   }
+  }
+ },
+ {
+  "name": "strategy-rules-untested",
+  "address": "/s/mixed-bag",
+  "resources": {
+   "/v1/strategies/mixed-bag": {
+    "strategy": {
+     "id": "mixed-bag",
+     "name": "Mixed <Bag> & \"Co\"",
+     "summary": "Every kind of line a strategy's rules can have.",
+     "accent": "violet",
+     "kind": "rules",
+     "starter": false,
+     "trades": "Every month",
+     "outline": [
+      {
+       "depth": 0,
+       "kind": "split",
+       "text": "Safe side: split in set shares between"
+      },
+      {
+       "depth": 1,
+       "kind": "asset",
+       "text": "VTI",
+       "name": "US stock market",
+       "share": 0.6
+      },
+      {
+       "depth": 1,
+       "kind": "asset",
+       "text": "ZZZZ",
+       "share": 0.075
+      },
+      {
+       "depth": 1,
+       "kind": "if",
+       "text": "If all of these are true"
+      },
+      {
+       "depth": 2,
+       "kind": "condition",
+       "text": "QQQ's price is above its 200-day average price"
+      },
+      {
+       "depth": 2,
+       "kind": "condition",
+       "text": "Any of these is true"
+      },
+      {
+       "depth": 3,
+       "kind": "condition",
+       "text": "QQQ's 10-day relative strength is below 80%"
+      },
+      {
+       "depth": 1,
+       "kind": "then",
+       "text": "Then"
+      },
+      {
+       "depth": 2,
+       "kind": "pick",
+       "text": "Of these, hold the 2 with the highest 126-day return"
+      },
+      {
+       "depth": 3,
+       "kind": "asset",
+       "text": "XLK",
+       "name": "Tech & <things>"
+      },
+      {
+       "depth": 3,
+       "kind": "asset",
+       "text": "XLE",
+       "name": "Energy"
+      },
+      {
+       "depth": 1,
+       "kind": "else",
+       "text": "Otherwise"
+      },
+      {
+       "depth": 2,
+       "kind": "asset",
+       "text": "BIL",
+       "name": "Short-term US government bills"
+      }
+     ],
+     "holdings": []
+    }
+   }
+  }
+ },
+ {
+  "name": "broke-explore",
+  "address": "/explore",
+  "resources": {},
+  "broke": true
  }
 ]

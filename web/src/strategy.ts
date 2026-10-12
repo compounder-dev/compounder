@@ -1,8 +1,8 @@
-// The words and figures drawn from one starter. The server writes the same
+// The words and figures drawn from one strategy. The server writes the same
 // ones into the first response, and the files in contract/ hold both to them.
 
-import { FUND_COLOURS, type FundColour, type Holding, type Starter, type TestFigures } from './api.ts';
-import { formatPercent, formatQuantity } from './format.ts';
+import { FUND_COLOURS, type FundColour, type Holding, type Strategy, type TestFigures } from './api.ts';
+import { formatPercent } from './format.ts';
 
 /** The ticker a person recognises: "NVDAon" becomes "NVDA". */
 export function ticker(holding: Holding): string {
@@ -30,13 +30,7 @@ export function holdsLine(holdings: Holding[]): string {
   return rest > 0 ? `${names} and ${rest} more` : names;
 }
 
-/** When a fund that follows the strategy trades, in one line. */
-export function tradesLine(settings: Starter['strategy']['tradingSettings']): string {
-  if (settings.type === 'threshold') return `When a holding drifts ${formatQuantity(settings.triggerPercentage) ?? ''}% from its target`;
-  return `On a ${settings.frequency} schedule`;
-}
-
-/** The identity colour a starter was given, or the first one when the server sends a name we do not know. */
+/** The identity colour a strategy was given, or the first one when the server sends a name we do not know. */
 export function fundColour(accent: string): FundColour {
   return FUND_COLOURS.find((colour) => colour === accent) ?? FUND_COLOURS[0];
 }
@@ -74,6 +68,18 @@ export function changeTone(change: number | null): 'gain' | 'loss' | 'plain' {
 /** The one line under a test's figures that says what they are and what they are not. */
 export function testedLine(test: TestFigures): string {
   return `Tested on past prices from ${monthYear(test.first_day)} to ${monthYear(test.last_day)}, with a cost of ${formatPercent(test.cost) ?? ''} taken from each trade. This fund is not live yet. Past results do not promise future results.`;
+}
+
+/** The funds whose name, sentence or holdings have every word of what was typed. Nothing typed keeps them all. */
+export function matching(strategies: Strategy[], typed: string, kind: 'all' | Strategy['kind']): Strategy[] {
+  const words = typed.toLowerCase().split(/\s+/).filter(Boolean);
+  return strategies.filter((strategy) => {
+    if (kind !== 'all' && strategy.kind !== kind) return false;
+    const text = [strategy.name, strategy.summary, ...strategy.holdings.flatMap((holding) => [ticker(holding), displayName(holding)]), ...(strategy.outline ?? []).flatMap((line) => (line.kind === 'asset' ? [line.text, line.name ?? ''] : []))]
+      .join(' ')
+      .toLowerCase();
+    return words.every((word) => text.includes(word));
+  });
 }
 
 /** Whether the engine's weights, in parts per billion, are the allocation the server sent. */
