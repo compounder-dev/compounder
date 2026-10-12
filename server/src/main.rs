@@ -6,6 +6,7 @@ mod page;
 
 mod backtest;
 mod prices;
+mod tested;
 
 use std::{
     collections::BTreeMap,
@@ -18,7 +19,10 @@ use axum::{
     body::Bytes,
     extract::{rejection::JsonRejection, DefaultBodyLimit, Path, Request, State},
     handler::HandlerWithoutStateExt,
-    http::{header::CACHE_CONTROL, HeaderValue, StatusCode, Uri},
+    http::{
+        header::{CACHE_CONTROL, CONTENT_TYPE},
+        HeaderValue, StatusCode, Uri,
+    },
     middleware::{self, Next},
     response::{Html, IntoResponse, Response},
     routing::{get, post},
@@ -29,7 +33,8 @@ use prices::Prices;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::sync::Semaphore;
-use tower_http::services::ServeDir;
+use tested::{Figures, Tested};
+use tower_http::{compression::CompressionLayer, services::ServeDir};
 
 /// The port to listen on, unless `PORT` names another.
 const DEFAULT_PORT: u16 = 8787;
@@ -123,10 +128,13 @@ struct StarterView {
     /// The same fund as a rule document, which is what a backtest takes.
     #[serde(default, skip_serializing_if = "Value::is_null")]
     rules: Value,
+    /// What its test over past prices came to, where there are prices to test it on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    test: Option<Figures>,
     holdings: Vec<Holding>,
 }
 
-fn starter_view(starter: &Starter) -> Result<StarterView, ApiError> {
+fn starter_view(starter: &Starter, tested: Option<&Tested>) -> Result<StarterView, ApiError> {
     let targets = starter.strategy.targets().map_err(ApiError::invalid_strategy)?;
     let rules = RuleStrategy::from_fixed(&starter.strategy).map_err(ApiError::invalid_strategy)?;
     Ok(StarterView {
@@ -136,12 +144,36 @@ fn starter_view(starter: &Starter) -> Result<StarterView, ApiError> {
         accent: starter.accent.clone(),
         strategy: starter.strategy.clone(),
         rules: rules.document(),
+        test: tested.and_then(|tested| tested.of(&starter.id, &rules)).map(|test| test.figures.clone()),
         holdings: holdings(targets),
     })
 }
 
-fn starter_views() -> Result<Vec<StarterView>, ApiError> {
-    starters().iter().map(starter_view).collect()
+fn starter_views(tested: Option<&Tested>) -> Result<Vec<StarterView>, ApiError> {
+    starters().iter().map(|starter| starter_view(starter, tested)).collect()
+}
+
+fn find_starter(id: &str) -> Result<&'static Starter, ApiError> {
+    starters().iter().find(|starter| starter.id == id).ok_or_else(|| ApiError::not_found("no such starter"))
+}
+
+/// What every route can reach: the price store, when there is one, and the starters' tests on it.
+#[derive(Clone)]
+struct Shared {
+    prices: Option<Arc<Prices>>,
+    tested: Option<Arc<Tested>>,
+}
+
+impl Shared {
+    fn over(prices: Option<Arc<Prices>>) -> Shared {
+        Shared { tested: prices.clone().map(|prices| Arc::new(Tested::on(prices))), prices }
+    }
+}
+
+/// A test is plain arithmetic and can take a while, so anything that may run one
+/// is worked out off the threads that answer requests.
+async fn aside<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) -> Result<T, ApiError> {
+    tokio::task::spawn_blocking(work).await.map_err(|error| ApiError::broken(error.to_string()))
 }
 
 /// Every non-2xx response has this shape.
@@ -223,13 +255,26 @@ async fn list_assets() -> Json<Value> {
     Json(json!({ "assets": assets().values().collect::<Vec<_>>() }))
 }
 
-async fn list_starters() -> ApiResult {
-    Ok(Json(json!({ "starters": starter_views()? })))
+async fn list_starters(State(shared): State<Shared>) -> ApiResult {
+    let views = aside(move || starter_views(shared.tested.as_deref())).await??;
+    Ok(Json(json!({ "starters": views })))
 }
 
-async fn one_starter(Path(id): Path<String>) -> ApiResult {
-    let starter = starters().iter().find(|starter| starter.id == id).ok_or_else(|| ApiError::not_found("no such starter"))?;
-    Ok(Json(json!({ "starter": starter_view(starter)? })))
+async fn one_starter(State(shared): State<Shared>, Path(id): Path<String>) -> ApiResult {
+    let starter = find_starter(&id)?;
+    let view = aside(move || starter_view(starter, shared.tested.as_deref())).await??;
+    Ok(Json(json!({ "starter": view })))
+}
+
+/// A starter's whole test, day by day, beside its benchmark: what the chart on its page draws.
+async fn starter_test(State(shared): State<Shared>, Path(id): Path<String>) -> Result<Response, ApiError> {
+    let starter = find_starter(&id)?;
+    let Some(tested) = shared.tested else {
+        return Err(ApiError::unavailable("this server has no price history to test a starter on"));
+    };
+    let rules = RuleStrategy::from_fixed(&starter.strategy).map_err(ApiError::invalid_strategy)?;
+    let test = aside(move || tested.of(&starter.id, &rules)).await?.ok_or_else(|| ApiError::unavailable("this starter cannot be tested just now"))?;
+    Ok(([(CONTENT_TYPE, HeaderValue::from_static("application/json"))], test.body.clone()).into_response())
 }
 
 /// Always 200: an invalid document is a normal answer here, with its problems listed.
@@ -245,18 +290,15 @@ async fn strategy_targets(body: Result<Json<Strategy>, JsonRejection>) -> ApiRes
     Ok(Json(json!({ "holdings": holdings(targets) })))
 }
 
-/// A backtest is plain arithmetic and can take a while, so it runs off the
-/// threads that answer requests.
-async fn backtest_strategy(State(prices): State<Option<Arc<Prices>>>, body: Bytes) -> ApiResult {
+async fn backtest_strategy(State(shared): State<Shared>, body: Bytes) -> ApiResult {
     let text = std::str::from_utf8(&body).map_err(|_| ApiError::invalid_request("the request is not text"))?;
     let ask = backtest::Ask::read(text)?;
-    let Some(prices) = prices else {
+    let Some(prices) = shared.prices else {
         return Err(ApiError::unavailable("this server has no price history to run a backtest on"));
     };
     // No more run at once than there are processors. The rest wait their turn.
     let _turn = turns().acquire().await.map_err(|error| ApiError::broken(error.to_string()))?;
-    let answer = tokio::task::spawn_blocking(move || backtest::run(&prices, &ask)).await.map_err(|error| ApiError::broken(error.to_string()))?;
-    Ok(Json(answer?))
+    Ok(Json(aside(move || backtest::run(&prices, &ask)).await??))
 }
 
 fn turns() -> &'static Semaphore {
@@ -329,11 +371,11 @@ enum Lookup {
     Broke,
 }
 
-fn look_up(path: &str) -> Lookup {
+fn look_up(path: &str, tested: Option<&Tested>) -> Lookup {
     match page::route(path) {
-        page::Route::Home => starter_views().map_or(Lookup::Broke, Lookup::Home),
+        page::Route::Home => starter_views(tested).map_or(Lookup::Broke, Lookup::Home),
         page::Route::Starter(id) => match starters().iter().find(|starter| starter.id == id) {
-            Some(starter) => starter_view(starter).map_or(Lookup::Broke, |view| Lookup::Starter(Box::new(view))),
+            Some(starter) => starter_view(starter, tested).map_or(Lookup::Broke, |view| Lookup::Starter(Box::new(view))),
             None => Lookup::NotFound,
         },
         page::Route::NotFound => Lookup::NotFound,
@@ -353,16 +395,20 @@ fn respond(shell: &str, path: &str, lookup: &Lookup) -> (StatusCode, Html<String
 
 /// Every address that is not a file or an API route: one of the app's screens, or the not-found page.
 /// The shell is read on each request, so a new build of the web app is picked up at once.
-async fn page_for(shell_file: PathBuf, uri: Uri) -> (StatusCode, Html<String>) {
+async fn page_for(shell_file: PathBuf, tested: Option<Arc<Tested>>, uri: Uri) -> (StatusCode, Html<String>) {
     let built = tokio::fs::read_to_string(shell_file).await.unwrap_or_default();
-    respond(page::shell_or_bare(&built), uri.path(), &look_up(uri.path()))
+    let path = uri.path().to_string();
+    let lookup = aside(move || look_up(&path, tested.as_deref())).await.unwrap_or(Lookup::Broke);
+    respond(page::shell_or_bare(&built), uri.path(), &lookup)
 }
 
 /// The API and the web app built into `dist`, on one router. `prices` is the price store
 /// backtests run on, when there is one.
 fn router(dist: PathBuf, prices: Option<Arc<Prices>>) -> Router {
+    let shared = Shared::over(prices);
     let shell_file = dist.join("index.html");
-    let pages = move |uri: Uri| page_for(shell_file.clone(), uri);
+    let tested = shared.tested.clone();
+    let pages = move |uri: Uri| page_for(shell_file.clone(), tested.clone(), uri);
     // Files the build put beside the shell, such as the icon. Anything else is a page.
     let web = ServeDir::new(&dist).append_index_html_on_directories(false).fallback(pages.into_service());
     // The build leaves a compressed copy beside each asset, and a browser that asks for one gets it.
@@ -371,19 +417,22 @@ fn router(dist: PathBuf, prices: Option<Arc<Prices>>) -> Router {
         .route("/assets", get(list_assets))
         .route("/starters", get(list_starters))
         .route("/starters/{id}", get(one_starter))
+        .route("/starters/{id}/test", get(starter_test))
         .route("/strategy/validate", post(validate_strategy))
         .route("/strategy/targets", post(strategy_targets))
         .route("/backtest", post(backtest_strategy))
         // An event is a few words. Anything larger is not one.
         .route("/events", post(log_event).layer(DefaultBodyLimit::max(512)))
         .fallback(unknown_api_route)
-        .with_state(prices);
+        .with_state(shared);
     Router::new()
         .route("/health", get(health))
         .nest("/v1", api)
         // A missing asset is a 404, never a page under an asset's name.
         .nest_service("/assets", assets)
         .fallback_service(web)
+        // Pages and answers are sent compressed to a browser that asks. An asset already is.
+        .layer(CompressionLayer::new())
         .layer(middleware::from_fn(cache_policy))
 }
 
@@ -776,6 +825,19 @@ mod tests {
             MadeUp { dir }
         }
 
+        /// The same store with a climbing price for every share a token tracks, so each starter can be tested.
+        fn with_every_tracked_share(name: &str) -> MadeUp {
+            use compounder_prices::{adjust::Bar, store::Store};
+            let made = MadeUp::new(name);
+            let mut store = Store::open(&made.dir).unwrap();
+            let days: Vec<_> = store.find("SPY").unwrap().unwrap().iter().map(|bar| bar.day).collect();
+            for ticker in assets().values().filter_map(|asset| asset.tracks.as_deref()).filter(|ticker| !["SPY", "KO", "NVDA", "TLT"].contains(ticker)) {
+                let bars: Vec<Bar> = days.iter().enumerate().map(|(index, day)| Bar::new(*day, 40.0 + 0.25 * index as f64)).collect();
+                store.save(ticker, &bars).unwrap();
+            }
+            made
+        }
+
         fn prices(&self) -> Option<Arc<Prices>> {
             Some(Arc::new(Prices::at(&self.dir)))
         }
@@ -927,6 +989,76 @@ mod tests {
             let rules = RuleStrategy::from_document(&starter["rules"]).expect("a sound document");
             assert_eq!(rules.name, starter["name"].as_str().unwrap());
             assert!(rules.validate(compounder_engine::rules::MAX_NODES).is_empty());
+        }
+    }
+
+    #[tokio::test]
+    async fn a_starter_carries_what_its_test_came_to_where_there_are_prices() {
+        let store = MadeUp::with_every_tracked_share("figures");
+        let (status, body) = call_with(store.prices(), "GET", "/v1/starters", None).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        for starter in body["starters"].as_array().unwrap() {
+            let test = &starter["test"];
+            assert_eq!((test["first_day"].as_str(), test["last_day"].as_str()), (Some("2024-01-01"), Some("2025-02-21")), "{starter}");
+            assert!(test["per_year"].as_f64().unwrap() > 0.0, "{test}");
+            assert!(test["worst_drop"].as_f64().unwrap() >= 0.0, "{test}");
+            assert!(test["sharpe"].is_number() && test["benchmark_per_year"].is_number(), "{test}");
+            assert_eq!(test["cost"], 0.0015);
+        }
+        let id = body["starters"][0]["id"].as_str().unwrap();
+        let (_, one) = call_with(store.prices(), "GET", &format!("/v1/starters/{id}"), None).await;
+        assert_eq!(one["starter"]["test"], body["starters"][0]["test"]);
+        // The page has the figures in its first response as well.
+        let request = Request::builder().uri(format!("/s/{id}")).body(Body::empty()).unwrap();
+        let page = text_of(unbuilt(store.prices()).oneshot(request).await.unwrap()).await;
+        assert_eq!(seed_in(&page)["resources"][format!("/v1/starters/{id}")]["starter"]["test"], body["starters"][0]["test"]);
+    }
+
+    #[tokio::test]
+    async fn a_starter_with_no_prices_to_test_it_on_is_listed_without_figures() {
+        for prices in [None, MadeUp::new("untested").prices()] {
+            let (status, body) = call_with(prices, "GET", "/v1/starters", None).await;
+            assert_eq!(status, StatusCode::OK);
+            assert!(body["starters"].as_array().unwrap().iter().all(|starter| starter.get("test").is_none()), "{body}");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_starters_whole_test_is_served_for_its_chart() {
+        let store = MadeUp::with_every_tracked_share("series");
+        let id = &starters()[0].id;
+        let (status, body) = call_with(store.prices(), "GET", &format!("/v1/starters/{id}/test"), None).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(body["days"].as_array().unwrap().len(), 300);
+        assert_eq!(body["values"].as_array().unwrap().len(), 300);
+        assert_eq!(body["benchmark"]["values"].as_array().unwrap().len(), 300);
+        assert_eq!((body["benchmark"]["symbol"].as_str(), body["slippage"].as_f64()), (Some("SPY"), Some(0.0015)));
+
+        let (status, body) = call_with(store.prices(), "GET", "/v1/starters/no-such-fund/test", None).await;
+        assert_eq!((status, body["error"]["code"].as_str()), (StatusCode::NOT_FOUND, Some("not_found")));
+        let (status, body) = call("GET", &format!("/v1/starters/{id}/test"), None).await;
+        assert_eq!((status, body["error"]["code"].as_str()), (StatusCode::SERVICE_UNAVAILABLE, Some("unavailable")));
+        let (status, body) = call_with(MadeUp::new("series-short").prices(), "GET", &format!("/v1/starters/{id}/test"), None).await;
+        assert_eq!((status, body["error"]["code"].as_str()), (StatusCode::SERVICE_UNAVAILABLE, Some("unavailable")));
+    }
+
+    #[tokio::test]
+    async fn an_answer_is_sent_compressed_to_a_browser_that_asks() {
+        let request = |encoding: Option<&str>| {
+            let mut request = Request::builder().uri("/v1/starters");
+            if let Some(encoding) = encoding {
+                request = request.header(header::ACCEPT_ENCODING, encoding);
+            }
+            unbuilt(None).oneshot(request.body(Body::empty()).unwrap())
+        };
+        let plain = request(None).await.unwrap();
+        assert!(plain.headers().get(header::CONTENT_ENCODING).is_none());
+        let plain = axum::body::to_bytes(plain.into_body(), usize::MAX).await.unwrap();
+        for encoding in ["gzip", "br"] {
+            let packed = request(Some(encoding)).await.unwrap();
+            assert_eq!(packed.headers().get(header::CONTENT_ENCODING).unwrap(), encoding);
+            let packed = axum::body::to_bytes(packed.into_body(), usize::MAX).await.unwrap();
+            assert!(packed.len() * 2 < plain.len(), "{encoding}: {} of {}", packed.len(), plain.len());
         }
     }
 

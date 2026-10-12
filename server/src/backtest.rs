@@ -9,6 +9,9 @@
 //!   "trades": true }                               optional: list every trading day
 //! ```
 //!
+//! The answer repeats the capital and the slippage it ran on, so a figure can
+//! be shown beside what it cost to make.
+//!
 //! Money is rounded here and nowhere before: a value to the cent, a weight
 //! to a millionth.
 
@@ -83,6 +86,12 @@ impl Ask {
         };
         let run = Run { start: day("start")?, end: day("end")?, capital: number("capital", CAPITAL)?, slippage: number("slippage", SLIPPAGE)?, min_order: MIN_ORDER, run_in: false };
         Ok(Ask { strategy, run, benchmark, trades })
+    }
+
+    /// A strategy over all the days it has, on the settings a request gets when it names none.
+    pub fn plain(strategy: RuleStrategy, benchmark: &str) -> Ask {
+        let run = Run { start: None, end: None, capital: CAPITAL, slippage: SLIPPAGE, min_order: MIN_ORDER, run_in: false };
+        Ask { strategy, run, benchmark: Some(benchmark.to_string()), trades: false }
     }
 }
 
@@ -165,6 +174,7 @@ pub fn run(prices: &Prices, ask: &Ask) -> Result<Value, ApiError> {
     let mut answer = json!({
         "hash": ask.strategy.hash(),
         "capital": result.capital,
+        "slippage": ask.run.slippage,
         "first_day": result.first_day.to_string(),
         "last_day": result.last_day.to_string(),
         "assets": result.assets.iter().map(described).collect::<Vec<_>>(),

@@ -19,7 +19,7 @@ use compounder_prices::{
 };
 
 /// How long what was read from the store is kept.
-const KEEP: Duration = Duration::from_secs(300);
+pub const KEEP: Duration = Duration::from_secs(300);
 /// The tickers whose bars make the trading calendar: a broad fund for the
 /// years it covers, and an older share to carry the calendar back before it.
 const CALENDAR_TICKERS: [&str; 2] = ["SPY", "KO"];
