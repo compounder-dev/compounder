@@ -36,6 +36,8 @@ function keep(draft: Draft) {
  * listed shares they track, so each token is swapped for its share.
  */
 async function copyOf(id: string): Promise<Draft | null> {
+  // The name comes from the address bar. Only one that could be a fund's is asked for.
+  if (!/^[A-Za-z0-9_-]+$/.test(id)) return null;
   const [found, registry] = await Promise.all([fetch(`/v1/strategies/${id}`), fetch('/v1/assets')]);
   if (!found.ok || !registry.ok) return null;
   const { strategy } = (await found.json()) as { strategy?: { rules?: unknown } };
