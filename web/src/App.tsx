@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { BottomBar, TopBar, type NavItem } from './parts/index.ts';
-import { EXPLORE, matchRoute, PRICING, useAddress, type Route } from './route.ts';
+import { BUILD, EXPLORE, matchRoute, PRICING, useAddress, type Route } from './route.ts';
+import { Build } from './screens/Build.tsx';
 import { Explore } from './screens/Explore.tsx';
 import { Home } from './screens/Home.tsx';
 import { Pricing } from './screens/Pricing.tsx';
@@ -11,6 +12,7 @@ import { Boundary, Broke, NotFound, OfflineBar } from './screens/System.tsx';
 const PLACES: NavItem[] = [
   { href: '/', label: 'Home', icon: 'home', holds: () => false },
   { href: EXPLORE, label: 'Explore', icon: 'search', holds: (path) => matchRoute(path).screen === 'strategy' },
+  { href: BUILD, label: 'Build', icon: 'pencil', holds: () => false },
   { href: PRICING, label: 'Pricing', icon: 'coin', holds: () => false },
 ];
 
@@ -20,6 +22,8 @@ function Screen({ route }: { route: Route }) {
       return <Home />;
     case 'explore':
       return <Explore />;
+    case 'build':
+      return <Build />;
     case 'pricing':
       return <Pricing />;
     case 'strategy':

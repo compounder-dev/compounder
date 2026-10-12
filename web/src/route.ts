@@ -4,13 +4,15 @@
 import { useEffect, useSyncExternalStore, type MouseEvent } from 'react';
 
 export const EXPLORE = '/explore';
+export const BUILD = '/build';
 export const PRICING = '/pricing';
 
-export type Route = { screen: 'home' } | { screen: 'explore' } | { screen: 'pricing' } | { screen: 'strategy'; id: string } | { screen: 'not-found' };
+export type Route = { screen: 'home' } | { screen: 'explore' } | { screen: 'build' } | { screen: 'pricing' } | { screen: 'strategy'; id: string } | { screen: 'not-found' };
 
 export function matchRoute(path: string): Route {
   if (path === '/') return { screen: 'home' };
   if (path === EXPLORE) return { screen: 'explore' };
+  if (path === BUILD) return { screen: 'build' };
   if (path === PRICING) return { screen: 'pricing' };
   const strategy = /^\/s\/([A-Za-z0-9_-]+)$/.exec(path);
   if (strategy) return { screen: 'strategy', id: strategy[1] };

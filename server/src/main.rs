@@ -272,6 +272,20 @@ async fn one_strategy(State(shared): State<Shared>, Path(id): Path<String>) -> A
     Ok(Json(json!({ "strategy": view })))
 }
 
+/// Everything a strategy can be built from: each listed share or fund the server has prices for,
+/// with its name where it has one and the first day of its prices. The well-known funds come first.
+async fn universe(State(shared): State<Shared>) -> ApiResult {
+    let Some(prices) = shared.prices else {
+        return Err(ApiError::unavailable("this server has no price history to build a strategy on"));
+    };
+    let mut listed = aside(move || prices.listed()).await?.map_err(ApiError::broken)?;
+    let known: Vec<&str> = catalogue::well_known().collect();
+    let place = |symbol: &str| known.iter().position(|each| *each == symbol).unwrap_or(known.len());
+    listed.sort_by(|a, b| place(&a.0).cmp(&place(&b.0)).then_with(|| a.0.cmp(&b.0)));
+    let assets: Vec<Value> = listed.iter().map(|(symbol, first_day)| json!({ "symbol": symbol, "name": catalogue::listed_name(symbol), "first_day": first_day })).collect();
+    Ok(Json(json!({ "assets": assets })))
+}
+
 /// A fund's whole test, day by day, beside its benchmark: what the chart on its page draws.
 async fn strategy_test(State(shared): State<Shared>, Path(id): Path<String>) -> Result<Response, ApiError> {
     let entry = find_strategy(&id)?;
@@ -312,7 +326,7 @@ fn turns() -> &'static Semaphore {
 }
 
 /// The named events the app may log at this step. A name outside the list is refused.
-const EVENTS: [&str; 4] = ["home_seen", "explore_seen", "strategy_opened", "pricing_seen"];
+const EVENTS: [&str; 5] = ["home_seen", "explore_seen", "strategy_opened", "pricing_seen", "builder_opened"];
 
 /// One line of the app's own log: what happened, on which screen, to which strategy or fund.
 /// There is no field for who, and an unknown field is refused, so none can creep in.
@@ -371,6 +385,7 @@ fn web_dist() -> PathBuf {
 enum Lookup {
     Home(Vec<StrategyView>),
     Explore(Vec<StrategyView>),
+    Build,
     Pricing,
     Strategy(Box<StrategyView>),
     NotFound,
@@ -382,6 +397,7 @@ fn look_up(path: &str, tested: Option<&Tested>) -> Lookup {
     match page::route(path) {
         page::Route::Home => strategy_views(tested).map_or(Lookup::Broke, Lookup::Home),
         page::Route::Explore => strategy_views(tested).map_or(Lookup::Broke, Lookup::Explore),
+        page::Route::Build => Lookup::Build,
         page::Route::Pricing => Lookup::Pricing,
         page::Route::Strategy(id) => match catalogue::find(&id) {
             Some(entry) => strategy_view(entry, tested).map_or(Lookup::Broke, |view| Lookup::Strategy(Box::new(view))),
@@ -396,6 +412,7 @@ fn respond(shell: &str, path: &str, lookup: &Lookup) -> (StatusCode, Html<String
     let (status, screen) = match lookup {
         Lookup::Home(views) => (StatusCode::OK, page::Screen::Home(views)),
         Lookup::Explore(views) => (StatusCode::OK, page::Screen::Explore(views)),
+        Lookup::Build => (StatusCode::OK, page::Screen::Build),
         Lookup::Pricing => (StatusCode::OK, page::Screen::Pricing),
         Lookup::Strategy(view) => (StatusCode::OK, page::Screen::Strategy(view)),
         Lookup::NotFound => (StatusCode::NOT_FOUND, page::Screen::NotFound),
@@ -429,6 +446,7 @@ fn router(dist: PathBuf, prices: Option<Arc<Prices>>) -> Router {
         .route("/strategies", get(list_strategies))
         .route("/strategies/{id}", get(one_strategy))
         .route("/strategies/{id}/test", get(strategy_test))
+        .route("/universe", get(universe))
         .route("/strategy/validate", post(validate_strategy))
         .route("/strategy/targets", post(strategy_targets))
         .route("/backtest", post(backtest_strategy))
@@ -779,6 +797,29 @@ mod tests {
         assert!(text.contains("<dt>Trades</dt><dd>Checked every trading day</dd>"), "{text}");
         // With no prices there is no test, so the page says nothing of results or holdings.
         assert!(!text.contains("strategy-results") && !text.contains("strategy-holdings"), "{text}");
+    }
+
+    #[tokio::test]
+    async fn the_universe_lists_what_a_strategy_can_be_built_from() {
+        let store = MadeUp::new("universe");
+        let (status, body) = call_with(store.prices(), "GET", "/v1/universe", None).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        let assets = body["assets"].as_array().unwrap();
+        // The well-known funds lead, in the order they are offered. The rest follow by ticker.
+        let symbols: Vec<&str> = assets.iter().map(|asset| asset["symbol"].as_str().unwrap()).collect();
+        assert_eq!(symbols, ["TLT", "SPY", "KO", "NVDA"]);
+        assert_eq!(assets[0], json!({ "symbol": "TLT", "name": "Long-term US government bonds", "first_day": "2024-01-01" }));
+        // A share that a token tracks goes by that token's name, without the issuer's note.
+        assert_eq!(assets[3]["name"], "NVIDIA");
+        let (status, body) = call("GET", "/v1/universe", None).await;
+        assert_eq!((status, body["error"]["code"].as_str()), (StatusCode::SERVICE_UNAVAILABLE, Some("unavailable")));
+    }
+
+    #[tokio::test]
+    async fn the_builder_has_a_page_of_its_own() {
+        let (status, _, text) = page("/build").await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(text.contains("<title>Build a fund · Compounder</title>") && text.contains("Build a fund</h1>"), "{text}");
     }
 
     #[tokio::test]

@@ -85,5 +85,17 @@
  {
   "path": "/explore/rules",
   "screen": "not-found"
+ },
+ {
+  "path": "/build",
+  "screen": "build"
+ },
+ {
+  "path": "/build/",
+  "screen": "not-found"
+ },
+ {
+  "path": "/build/draft",
+  "screen": "not-found"
  }
 ]

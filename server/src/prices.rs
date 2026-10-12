@@ -65,6 +65,16 @@ impl Prices {
         let listings = tickers.iter().map(|ticker| read.listing(ticker)).collect::<Result<_, _>>()?;
         Ok((read.calendar.clone(), listings))
     }
+
+    /// Every ticker the store has prices for, with the first day it has them, in the store's own order.
+    pub fn listed(&self) -> Result<Vec<(String, String)>, String> {
+        let mut kept = self.read.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        if kept.as_ref().is_none_or(|read| read.at.elapsed() > KEEP) {
+            *kept = Some(Read::open(&self.dir)?);
+        }
+        let store = &kept.as_ref().expect("just read").store;
+        Ok(store.tickers().filter_map(|ticker| Some((ticker.to_string(), store.span(ticker)?.first_day.to_string()))).collect())
+    }
 }
 
 impl Read {

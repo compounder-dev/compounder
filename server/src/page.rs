@@ -15,6 +15,7 @@ use crate::{outline::Line, tested::Figures, Holding, StrategyView};
 pub enum Route {
     Home,
     Explore,
+    Build,
     Pricing,
     Strategy(String),
     NotFound,
@@ -26,6 +27,9 @@ pub fn route(path: &str) -> Route {
     }
     if path == "/explore" {
         return Route::Explore;
+    }
+    if path == "/build" {
+        return Route::Build;
     }
     if path == "/pricing" {
         return Route::Pricing;
@@ -41,6 +45,8 @@ pub enum Screen<'a> {
     /// The home page is handed every fund and leads with the starters among them.
     Home(&'a [StrategyView]),
     Explore(&'a [StrategyView]),
+    /// The builder draws itself in the browser, from a draft kept there. The page is its title and its place.
+    Build,
     Pricing,
     Strategy(&'a StrategyView),
     NotFound,
@@ -53,6 +59,7 @@ const ICON_ARROW_LEFT: &str = "M16 10H4m5-5-5 5 5 5";
 const ICON_CLOCK: &str = "M10 3a7 7 0 1 0 0 14a7 7 0 0 0 0-14zm0 3.5V10l2.5 2";
 const ICON_CHECK: &str = "m4.5 10.5 3.5 3.5 7.5-8";
 const ICON_SEARCH: &str = "M9 3.5a5.5 5.5 0 1 0 0 11a5.5 5.5 0 0 0 0-11zm4 9.5 3.5 3.5";
+const ICON_PENCIL: &str = "m4 16 .8-3.2L13.6 4a1.4 1.4 0 0 1 2 0l.4.4a1.4 1.4 0 0 1 0 2L7.2 15.2 4 16z";
 const ICON_COIN: &str = "M10 3a7 7 0 1 0 0 14a7 7 0 0 0 0-14zm0 3v8m2-6.2c-.4-.6-1.1-.9-2-.9-1.2 0-2 .6-2 1.4 0 2 4 .9 4 2.8 0 .8-.8 1.4-2 1.4-.9 0-1.7-.4-2.1-1";
 
 const FUND_COLOURS: [&str; 5] = ["blue", "orange", "teal", "violet", "magenta"];
@@ -333,7 +340,12 @@ fn home(views: &[StrategyView]) -> String {
         r#"<h1 class="page-title home-title">Build your own wealth fund.</h1>"#,
         r#"<p class="page-lead">Pick a fund that is already built and see how it would have done over years of real prices.</p>"#,
         r#"<p class="price-line">Free to build and test. Your first fund is free to run. More funds are $20 a month. <a class="link link-inline" href="/pricing">See pricing</a></p>"#,
-        r#"<h2 class="section-title cards-title">Start from one of these</h2>"#,
+        r#"<p class="home-actions"><a class="button button-primary" href="/build">"#,
+    ));
+    out.push_str(&icon(ICON_PENCIL));
+    out.push_str(concat!(
+        r#"Build your own</a><a class="button button-secondary" href="/explore">Explore funds</a></p>"#,
+        r#"<h2 class="section-title cards-title">Or start from one of these</h2>"#,
     ));
     // The home page leads with the few funds a person can begin with. The rest are on Explore.
     if !views.iter().any(|view| view.starter) {
@@ -436,9 +448,12 @@ fn strategy(view: &StrategyView) -> String {
             r#"<header class="strategy-head"><h1 class="page-title"><span class="fund-dot" aria-hidden="true"></span>{name}</h1><p class="page-lead">{summary}</p></header>"#,
             "{results}{rules}{held}",
             r#"<aside class="card card-plain strategy-facts" aria-label="Facts"><dl class="facts">{count}<div><dt>Trades</dt><dd>{trades}</dd></div></dl>"#,
+            r#"<a class="button button-secondary button-full" href="/build?from={id}">{pencil}Change the rules</a>"#,
             r#"<p class="strategy-note">Adding money is not open yet.</p></aside></div>"#,
         ),
         back = icon(ICON_ARROW_LEFT),
+        pencil = icon(ICON_PENCIL),
+        id = escape(&view.id),
         colour = fund_colour(&view.accent),
         name = escape(&view.name),
         summary = escape(&view.summary),
@@ -449,6 +464,11 @@ fn strategy(view: &StrategyView) -> String {
         trades = escape(&view.trades),
     )
 }
+
+const BUILD: &str = concat!(
+    r#"<h1 class="page-title">Build a fund</h1><p class="page-lead">Add what it holds and the rules it follows. It is tested on real prices as you go.</p>"#,
+    r#"<div class="builder-waiting" aria-busy="true"><span class="skeleton skeleton-chart" aria-hidden="true"></span></div>"#,
+);
 
 /// The two plans: a name, a price, what the price is for, and what the plan includes.
 const PLANS: [(&str, &str, Option<&str>, [&str; 2]); 2] =
@@ -490,6 +510,7 @@ pub fn title(screen: &Screen) -> String {
     match screen {
         Screen::Home(_) => "Compounder".to_string(),
         Screen::Explore(_) => "Explore · Compounder".to_string(),
+        Screen::Build => "Build a fund · Compounder".to_string(),
         Screen::Pricing => "Pricing · Compounder".to_string(),
         Screen::Strategy(view) => format!("{} · Compounder", view.name),
         Screen::NotFound => "Page not found · Compounder".to_string(),
@@ -501,22 +522,29 @@ pub fn title(screen: &Screen) -> String {
 pub fn body(path: &str, screen: &Screen) -> String {
     // A place is marked on its own screen and on the screens under it. A fund's page is under Explore.
     const PAGE: &str = r#" aria-current="page""#;
-    let (home_current, explore_current, pricing_current) = match route(path) {
-        Route::Home => (PAGE, "", ""),
-        Route::Explore => ("", PAGE, ""),
-        Route::Strategy(_) => ("", r#" aria-current="true""#, ""),
-        Route::Pricing => ("", "", PAGE),
-        Route::NotFound => ("", "", ""),
+    let (home_current, explore_current, build_current, pricing_current) = match route(path) {
+        Route::Home => (PAGE, "", "", ""),
+        Route::Explore => ("", PAGE, "", ""),
+        Route::Strategy(_) => ("", r#" aria-current="true""#, "", ""),
+        Route::Build => ("", "", PAGE, ""),
+        Route::Pricing => ("", "", "", PAGE),
+        Route::NotFound => ("", "", "", ""),
     };
     let inside = match screen {
         Screen::Home(views) => home(views),
         Screen::Explore(views) => explore(views),
+        Screen::Build => BUILD.to_string(),
         Screen::Pricing => pricing(),
         Screen::Strategy(view) => strategy(view),
         Screen::NotFound => NOT_FOUND.to_string(),
         Screen::Broke => broke(path),
     };
-    let places = [("/", "Home", ICON_HOME, home_current), ("/explore", "Explore", ICON_SEARCH, explore_current), ("/pricing", "Pricing", ICON_COIN, pricing_current)];
+    let places = [
+        ("/", "Home", ICON_HOME, home_current),
+        ("/explore", "Explore", ICON_SEARCH, explore_current),
+        ("/build", "Build", ICON_PENCIL, build_current),
+        ("/pricing", "Pricing", ICON_COIN, pricing_current),
+    ];
     let links: String = places.iter().map(|(href, label, _, current)| format!(r#"<a class="top-bar-link" href="{href}"{current}>{label}</a>"#)).collect();
     let tabs: String = places.iter().map(|(href, label, mark, current)| format!(r#"<a class="tab" href="{href}"{current}><span class="tab-mark">{}</span><span>{label}</span></a>"#, icon(mark))).collect();
     format!(
@@ -601,6 +629,7 @@ mod tests {
             return body(address, &Screen::Broke);
         }
         match route(address) {
+            Route::Build => body(address, &Screen::Build),
             Route::Pricing => body(address, &Screen::Pricing),
             Route::Home | Route::Explore => {
                 let views: Vec<StrategyView> = serde_json::from_value(case["resources"]["/v1/strategies"]["strategies"].clone()).unwrap();
@@ -637,6 +666,7 @@ mod tests {
             let expected = match case["screen"].as_str().unwrap() {
                 "home" => Route::Home,
                 "explore" => Route::Explore,
+                "build" => Route::Build,
                 "pricing" => Route::Pricing,
                 "strategy" => Route::Strategy(case["id"].as_str().unwrap().to_string()),
                 _ => Route::NotFound,

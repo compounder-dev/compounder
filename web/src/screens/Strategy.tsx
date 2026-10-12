@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type CSSProperties, type RefObject } from 'react';
 import { useStrategy, type OutlineLine, type Strategy, type TestFigures } from '../api.ts';
 import { useEvent } from '../events.ts';
-import { Banner, Button, Card, Icon, Link, Mark, Number, Row, RowSkeleton, Skeleton, StatBand, WeightBar, type IconName } from '../parts/index.ts';
-import { EXPLORE, useTitle } from '../route.ts';
+import { Banner, Button, ButtonLink, Card, Icon, Link, Mark, Number, Row, RowSkeleton, Skeleton, StatBand, WeightBar, type IconName } from '../parts/index.ts';
+import { BUILD, EXPLORE, useTitle } from '../route.ts';
 import { asFall, barShare, changeTone, displayName, fundColour, markLetter, sameAllocation, testedLine, ticker } from '../strategy.ts';
 import { NotFound } from './System.tsx';
 import { TestChart } from './TestChart.tsx';
@@ -158,6 +158,9 @@ function Ready({ strategy }: { strategy: Strategy }) {
             <dd>{strategy.trades}</dd>
           </div>
         </dl>
+        <ButtonLink href={`${BUILD}?from=${strategy.id}`} icon="pencil" fullWidth>
+          Change the rules
+        </ButtonLink>
         <p className="strategy-note">Adding money is not open yet.</p>
       </Card>
     </div>

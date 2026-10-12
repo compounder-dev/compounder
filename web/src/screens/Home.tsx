@@ -1,7 +1,7 @@
 import { useStrategies } from '../api.ts';
 import { useEvent } from '../events.ts';
-import { Banner, Button, CardSkeleton, EmptyState, Link } from '../parts/index.ts';
-import { EXPLORE, PRICING, useTitle } from '../route.ts';
+import { Banner, Button, ButtonLink, CardSkeleton, EmptyState, Link } from '../parts/index.ts';
+import { BUILD, EXPLORE, PRICING, useTitle } from '../route.ts';
 import { StrategyCard } from './StrategyCard.tsx';
 
 /** The strategy list in its four states: on its way, none, failed, here. */
@@ -60,7 +60,13 @@ export function Home() {
       <p className="price-line">
         Free to build and test. Your first fund is free to run. More funds are $20 a month. <Link href={PRICING}>See pricing</Link>
       </p>
-      <h2 className="section-title cards-title">Start from one of these</h2>
+      <p className="home-actions">
+        <ButtonLink variant="primary" href={BUILD} icon="pencil">
+          Build your own
+        </ButtonLink>
+        <ButtonLink href={EXPLORE}>Explore funds</ButtonLink>
+      </p>
+      <h2 className="section-title cards-title">Or start from one of these</h2>
       <Strategies />
     </>
   );

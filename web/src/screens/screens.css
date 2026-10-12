@@ -81,6 +81,14 @@
   margin-top: var(--space-4);
 }
 
+/* The two ways in from the first screen: build one, or look through those that are built. */
+.home-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+}
+
 /* The way on from the few funds here to all of them. */
 .more-link {
   margin-top: var(--space-6);
@@ -195,6 +203,10 @@
 .facts dd {
   text-align: right;
   text-wrap: balance;
+}
+
+.strategy-facts .button {
+  margin-top: var(--space-4);
 }
 
 .strategy-note {
@@ -368,4 +380,10 @@
     position: sticky;
     top: var(--space-6);
   }
+}
+
+/* ---- the builder's place, before its own code has arrived ---- */
+
+.builder-waiting {
+  margin-top: var(--section-gap);
 }

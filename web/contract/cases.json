@@ -1229,5 +1229,10 @@
   "address": "/explore",
   "resources": {},
   "broke": true
+ },
+ {
+  "name": "build",
+  "address": "/build",
+  "resources": {}
  }
 ]

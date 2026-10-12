@@ -1,0 +1,483 @@
+/* The builder. Values come from tokens.css only. */
+
+.builder {
+  display: grid;
+  gap: var(--space-6);
+  /* Room for the test bar that a phone keeps in view. */
+  padding-bottom: var(--space-16);
+}
+
+/* ---- the name, the tools and when it trades ---- */
+
+.builder-head {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-3);
+}
+
+.builder-title {
+  width: 100%;
+}
+
+/* The name is typed where it stands, in the size of a page title. */
+.builder-name {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: var(--space-2);
+  background: none;
+  color: inherit;
+  font: var(--type-title1);
+  letter-spacing: var(--type-title1-tracking);
+  text-overflow: ellipsis;
+}
+
+.builder-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.builder-trades {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--size-block);
+  padding: var(--space-2) var(--space-4);
+  border: var(--size-hairline) solid var(--stroke-control);
+  border-radius: var(--radius-full);
+  background: none;
+  color: var(--text-primary);
+  font: var(--type-small);
+  letter-spacing: var(--type-small-tracking);
+  text-align: left;
+  cursor: pointer;
+}
+
+.builder-trades-label {
+  color: var(--text-faint);
+}
+
+/* ---- the rules ---- */
+
+.builder-body {
+  display: grid;
+  gap: var(--section-gap);
+  min-width: 0;
+}
+
+/* The rules stand on a dotted ground, so the page reads as a place to build in. */
+.builder-rules {
+  min-width: 0;
+  padding: var(--space-4);
+  border-radius: var(--radius-card);
+  background-color: var(--ground-surface);
+  background-image: radial-gradient(var(--stroke-hairline) var(--size-hairline), transparent var(--size-hairline));
+  background-size: var(--space-4) var(--space-4);
+  overflow-x: auto;
+}
+
+.rules {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-2);
+}
+
+.rule {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+/* What hangs under a rule is set in from it, along a thin line. */
+.rule-list {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-2);
+  margin-left: var(--space-3);
+  padding-left: var(--space-3);
+  border-left: var(--size-hairline) solid var(--block-connector);
+}
+
+.pill {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--size-block);
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: var(--ground-raised);
+  color: var(--text-primary);
+  font: var(--type-body);
+  letter-spacing: var(--type-body-tracking);
+  text-align: left;
+  text-wrap: pretty;
+}
+
+button.pill {
+  cursor: pointer;
+}
+
+button.pill:active {
+  transform: scale(var(--press-scale));
+}
+
+.pill-split {
+  background: var(--block-weight);
+  color: var(--block-ink);
+}
+
+.pill-if {
+  background: var(--block-condition);
+  color: var(--block-ink);
+}
+
+.pill-pick {
+  background: var(--block-filter);
+  color: var(--block-ink);
+}
+
+.pill-name {
+  color: var(--text-muted);
+}
+
+.pill-problem {
+  outline: var(--size-focus-width) solid var(--status-loss);
+  outline-offset: var(--size-hairline);
+}
+
+.rule-problem {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  color: var(--status-loss);
+  font: var(--type-small);
+  letter-spacing: var(--type-small-tracking);
+}
+
+/* The place a new rule goes: an outline, not a block, until there is one. */
+.slot {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--size-block);
+  padding: var(--space-2) var(--space-3);
+  border: var(--size-hairline) dashed var(--stroke-control);
+  border-radius: var(--radius-control);
+  background: none;
+  color: var(--text-muted);
+  font: var(--type-small);
+  letter-spacing: var(--type-small-tracking);
+  cursor: pointer;
+}
+
+/* ---- the test, what it would hold, and what to fix ---- */
+
+.builder-panel {
+  display: grid;
+  gap: var(--space-6);
+  min-width: 0;
+  scroll-margin-top: var(--space-6);
+}
+
+.builder-test {
+  display: grid;
+  gap: var(--space-4);
+}
+
+/* The panel is narrow, so the four figures stand two by two at every width. */
+.builder-test .stat-band {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.builder-figures {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+  transition: opacity var(--duration-state) var(--easing-standard);
+}
+
+/* Figures from before the last edit stay in place, dimmed, until the new ones arrive. */
+.builder-stale {
+  opacity: 0.5;
+}
+
+.builder-hint {
+  color: var(--text-muted);
+  font: var(--type-small);
+  letter-spacing: var(--type-small-tracking);
+  text-wrap: pretty;
+}
+
+.builder-holds .rows {
+  margin-top: var(--space-4);
+}
+
+.builder-holds .bar {
+  display: none;
+}
+
+.fix-list {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.fix-line {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-primary);
+  font: var(--type-small);
+  letter-spacing: var(--type-small-tracking);
+  text-align: left;
+}
+
+button.fix-line {
+  cursor: pointer;
+}
+
+.fix-line > .icon {
+  margin-top: var(--space-1);
+  color: var(--status-loss);
+}
+
+/* The test in one line, kept in view above the bottom bar while the rules are edited. */
+.test-bar {
+  position: fixed;
+  right: var(--gutter-end);
+  bottom: calc(var(--size-bottom-bar) + env(safe-area-inset-bottom) + var(--space-3));
+  left: var(--gutter-start);
+  z-index: var(--z-sticky);
+  min-height: var(--size-target);
+  padding: var(--space-2) var(--space-4);
+  border: var(--size-hairline) solid var(--stroke-hairline);
+  border-radius: var(--radius-full);
+  background: var(--ground-raised);
+  box-shadow: var(--elevation-popover);
+  color: var(--text-primary);
+  font: var(--type-small);
+  letter-spacing: var(--type-small-tracking);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+/* ---- the editors ---- */
+
+.editor {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-4);
+}
+
+.editor > *,
+.editor-group > * {
+  max-width: 100%;
+}
+
+.editor-part,
+.editor-group {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-3);
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.editor-group {
+  padding: var(--space-4);
+  border-radius: var(--radius-control);
+  background: var(--ground-surface);
+}
+
+.editor-legend {
+  float: left;
+  width: 100%;
+  padding: 0;
+  font-weight: var(--weight-medium);
+  text-wrap: pretty;
+}
+
+.editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-6);
+  padding-top: var(--space-4);
+  border-top: var(--size-hairline) solid var(--stroke-hairline);
+}
+
+.form-field {
+  display: grid;
+  gap: var(--space-1);
+  width: 100%;
+}
+
+.form-label {
+  color: var(--text-muted);
+  font: var(--type-small);
+  letter-spacing: var(--type-small-tracking);
+}
+
+.form-box {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  height: var(--size-input);
+  padding: 0 var(--space-4);
+  border: var(--size-hairline) solid var(--stroke-control);
+  border-radius: var(--radius-control);
+  background: var(--ground-page);
+  color: var(--text-primary);
+}
+
+.form-box:focus-within {
+  outline: var(--size-focus-width) solid var(--focus-ring);
+  outline-offset: var(--size-focus-gap);
+}
+
+.form-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.form-suffix {
+  color: var(--text-faint);
+}
+
+.form-pick {
+  justify-content: space-between;
+  font: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+
+.form-pick-change {
+  color: var(--text-muted);
+  font: var(--type-small);
+  letter-spacing: var(--type-small-tracking);
+}
+
+.form-hint {
+  color: var(--text-muted);
+  font: var(--type-small);
+  letter-spacing: var(--type-small-tracking);
+  text-wrap: pretty;
+}
+
+.form-problem {
+  color: var(--status-loss);
+}
+
+/* ---- the lists to pick from ---- */
+
+.picker {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.picker-list {
+  display: grid;
+  gap: var(--row-gap);
+}
+
+.picker-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: var(--size-row);
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: var(--ground-surface);
+  color: var(--text-primary);
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.picker-row[aria-pressed='true'] {
+  background: var(--ground-hover);
+}
+
+.picker-name {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-muted);
+  text-wrap: pretty;
+}
+
+.picker-kind {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+}
+
+@media (hover: hover) {
+  .picker-row:hover,
+  .slot:hover,
+  .builder-trades:hover {
+    background: var(--ground-hover);
+  }
+
+  .slot:hover {
+    color: var(--text-primary);
+  }
+}
+
+@media (min-width: 640px) {
+  /* From tablet width there is no bottom bar to clear. */
+  .test-bar {
+    right: auto;
+    bottom: var(--space-4);
+  }
+}
+
+@media (min-width: 1024px) {
+  .builder {
+    padding-bottom: 0;
+  }
+
+  /* The rules on the left. Their test stays in view on the right. */
+  .builder-body {
+    grid-template-columns: minmax(0, 1fr) minmax(0, var(--size-sheet-max));
+    column-gap: var(--space-12);
+    align-items: start;
+  }
+
+  .builder-panel {
+    position: sticky;
+    top: var(--space-6);
+    max-height: calc(100dvh - var(--space-12));
+    overflow-y: auto;
+  }
+
+  .test-bar {
+    display: none;
+  }
+}

@@ -106,12 +106,30 @@ struct Listed {
     name: String,
 }
 
-/// What a person calls a listed share or fund, where the app has a name for it.
+fn listed() -> &'static Vec<Listed> {
+    static LISTED: OnceLock<Vec<Listed>> = OnceLock::new();
+    LISTED.get_or_init(|| {
+        let file: ListedFile = serde_json::from_str(include_str!("../data/listed.json")).expect("data/listed.json is valid");
+        file.listed
+    })
+}
+
+/// The funds a person is most likely to build with, in the order they are offered first.
+pub fn well_known() -> impl Iterator<Item = &'static str> {
+    listed().iter().map(|listed| listed.symbol.as_str())
+}
+
+/// What a person calls a listed share or fund, where the app has a name for it: the name it was
+/// given here, or the name of the token that tracks it without the issuer's closing note.
 pub fn listed_name(symbol: &str) -> Option<&'static str> {
     static NAMES: OnceLock<BTreeMap<String, String>> = OnceLock::new();
     let names = NAMES.get_or_init(|| {
-        let file: ListedFile = serde_json::from_str(include_str!("../data/listed.json")).expect("data/listed.json is valid");
-        file.listed.into_iter().map(|listed| (listed.symbol, listed.name)).collect()
+        let mut names: BTreeMap<String, String> = crate::assets()
+            .values()
+            .filter_map(|token| Some((token.tracks.clone()?, token.name.rsplit_once(" (").map_or(token.name.as_str(), |(name, _)| name).to_string())))
+            .collect();
+        names.extend(listed().iter().map(|listed| (listed.symbol.clone(), listed.name.clone())));
+        names
     });
     names.get(symbol).map(String::as_str)
 }
