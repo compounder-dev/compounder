@@ -1,0 +1,21 @@
+/* Layout for the parts page only. It is not part of the built app. */
+
+.gallery {
+  display: grid;
+  gap: var(--section-gap);
+  max-width: var(--size-reading-max);
+  margin-top: var(--section-gap);
+}
+
+.gallery-section {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.gallery-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}

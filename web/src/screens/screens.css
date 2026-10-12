@@ -1,0 +1,217 @@
+/* The screens: how the parts are laid out on each one. Values come from tokens.css only. */
+
+/* ---- the starter list ---- */
+
+.cards {
+  display: grid;
+  gap: var(--space-4);
+  max-width: var(--size-reading-max);
+  margin-top: var(--section-gap);
+}
+
+.cards > .card {
+  display: flex;
+  flex-direction: column;
+}
+
+.card-summary {
+  margin-top: var(--space-2);
+  color: var(--text-muted);
+  text-wrap: pretty;
+}
+
+/* The facts sit at the foot, so cards in a row line up whatever the length of their sentence. */
+.card-facts {
+  margin-top: auto;
+  padding-top: var(--space-4);
+}
+
+.card-facts dt {
+  color: var(--text-faint);
+  font: var(--type-caption);
+  letter-spacing: var(--type-caption-tracking);
+}
+
+.card-facts dd {
+  font: var(--type-small);
+  letter-spacing: var(--type-small-tracking);
+}
+
+.region-notice {
+  max-width: var(--size-reading-max);
+  margin-top: var(--section-gap);
+}
+
+/* ---- one starter ---- */
+
+.back-link {
+  margin: calc(var(--space-3) * -1) 0 var(--space-2);
+}
+
+.starter {
+  display: grid;
+  gap: var(--section-gap);
+}
+
+.starter-head .page-title {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+/* The dot sits on the middle of the first line of the name. */
+.starter-head .fund-dot {
+  width: var(--space-4);
+  height: var(--space-4);
+  margin-top: var(--space-3);
+}
+
+.facts > div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-6);
+  padding: var(--space-3) 0;
+  border-bottom: var(--size-hairline) solid var(--stroke-hairline);
+}
+
+.facts > div:first-child {
+  padding-top: 0;
+}
+
+.facts dt {
+  flex: none;
+  color: var(--text-faint);
+}
+
+.facts dd {
+  text-align: right;
+  text-wrap: balance;
+}
+
+.starter-note {
+  margin-top: var(--space-4);
+  color: var(--text-muted);
+  font: var(--type-small);
+  letter-spacing: var(--type-small-tracking);
+}
+
+.starter-holdings .rows {
+  margin-top: var(--space-4);
+}
+
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+  color: var(--text-muted);
+  font: var(--type-small);
+  letter-spacing: var(--type-small-tracking);
+}
+
+/* Before the check has run there is nothing true to say, so the line only holds its place. */
+.check-idle {
+  visibility: hidden;
+}
+
+.check-match {
+  color: var(--text-primary);
+}
+
+.check-mismatch {
+  color: var(--status-loss);
+}
+
+/* ---- not found, something broke, offline ---- */
+
+.system {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-6);
+  max-width: var(--size-reading-max);
+  padding: var(--section-gap) 0;
+}
+
+.system-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+/* The bar is always in the page, so a screen reader hears its words arrive. Empty, it takes no room. */
+.offline-bar {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  background: var(--ground-hover);
+  color: var(--text-muted);
+  font: var(--type-small);
+  letter-spacing: var(--type-small-tracking);
+}
+
+.offline-bar:not(:empty) {
+  padding: calc(var(--space-2) + env(safe-area-inset-top)) var(--gutter-end) var(--space-2) var(--gutter-start);
+}
+
+/* The offline bar already clears the top of the device, so the top bar under it need not. */
+.offline-bar:not(:empty) + .top-bar {
+  padding-top: 0;
+}
+
+/* On a phone the name needs the room. The share is still there as a number. */
+.starter-holdings .bar {
+  display: none;
+}
+
+@media (min-width: 640px) {
+  .home-title {
+    max-width: var(--size-reading-max);
+  }
+
+  .starter-holdings .bar {
+    display: block;
+  }
+}
+
+@media (min-width: 1024px) {
+  /* The largest step of the scale is for this one headline, on a wide screen only. */
+  .home-title {
+    max-width: none;
+    font: var(--type-display);
+    letter-spacing: var(--type-display-tracking);
+  }
+
+  .cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-6);
+    max-width: none;
+  }
+
+  /* Words and holdings on the left, the facts in a card that stays in view on the right. */
+  .starter {
+    grid-template-columns: minmax(0, 1fr) minmax(0, calc(var(--size-sheet-max) - var(--space-16)));
+    grid-template-areas:
+      'head facts'
+      'holdings facts';
+    column-gap: var(--space-12);
+    align-items: start;
+  }
+
+  .starter-head {
+    grid-area: head;
+  }
+
+  .starter-facts {
+    grid-area: facts;
+    position: sticky;
+    top: var(--space-6);
+  }
+
+  .starter-holdings {
+    grid-area: holdings;
+  }
+}

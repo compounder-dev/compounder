@@ -1,0 +1,65 @@
+[
+ {
+  "path": "/",
+  "screen": "home"
+ },
+ {
+  "path": "/s/magnificent-seven",
+  "screen": "starter",
+  "id": "magnificent-seven"
+ },
+ {
+  "path": "/s/odd_one-2",
+  "screen": "starter",
+  "id": "odd_one-2"
+ },
+ {
+  "path": "/s/A1",
+  "screen": "starter",
+  "id": "A1"
+ },
+ {
+  "path": "/s/",
+  "screen": "not-found"
+ },
+ {
+  "path": "/s",
+  "screen": "not-found"
+ },
+ {
+  "path": "/s/a/",
+  "screen": "not-found"
+ },
+ {
+  "path": "/s/a/b",
+  "screen": "not-found"
+ },
+ {
+  "path": "/s/a%2Db",
+  "screen": "not-found"
+ },
+ {
+  "path": "/s/a.b",
+  "screen": "not-found"
+ },
+ {
+  "path": "/s/é",
+  "screen": "not-found"
+ },
+ {
+  "path": "/S/a",
+  "screen": "not-found"
+ },
+ {
+  "path": "//",
+  "screen": "not-found"
+ },
+ {
+  "path": "/explore",
+  "screen": "not-found"
+ },
+ {
+  "path": "",
+  "screen": "not-found"
+ }
+]

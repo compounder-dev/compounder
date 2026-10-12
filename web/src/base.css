@@ -1,0 +1,188 @@
+/* The page itself and the frame around every screen. Values come from tokens.css only. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+:root {
+  /* The page gutter, or the device's own inset where a notch or a rounded corner needs more. */
+  --gutter-start: max(var(--gutter), env(safe-area-inset-left));
+  --gutter-end: max(var(--gutter), env(safe-area-inset-right));
+
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+  text-rendering: optimizeLegibility;
+  /* A sheet stops the page scrolling. Keeping the gutter stops the page jumping when it does. */
+  scrollbar-gutter: stable;
+}
+
+:root:has(dialog[open]) {
+  overflow: hidden;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background: var(--ground-page);
+  color: var(--text-primary);
+  font: var(--type-body);
+  letter-spacing: var(--type-body-tracking);
+}
+
+h1,
+h2,
+h3,
+p,
+ul,
+ol,
+dl,
+dd {
+  margin: 0;
+}
+
+/* A list without bullets is still a list. Each one says so with a role, which some browsers otherwise drop. */
+ul,
+ol {
+  padding: 0;
+  list-style: none;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+}
+
+/* One focus ring for every control. */
+:focus-visible {
+  outline: var(--size-focus-width) solid var(--focus-ring);
+  outline-offset: var(--size-focus-gap);
+}
+
+/* For people who do not see the screen: in the page, read aloud, taking no room. */
+.sr-only {
+  position: absolute;
+  width: var(--size-hairline);
+  height: var(--size-hairline);
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.icon {
+  flex: none;
+  width: var(--size-icon-md);
+  height: var(--size-icon-md);
+}
+
+.icon-sm {
+  width: var(--size-icon-sm);
+  height: var(--size-icon-sm);
+}
+
+.icon-lg {
+  width: var(--size-icon-lg);
+  height: var(--size-icon-lg);
+}
+
+/* ---- the frame ---- */
+
+.skip-link {
+  position: absolute;
+  top: var(--space-2);
+  left: var(--gutter-start);
+  z-index: var(--z-toast);
+  display: flex;
+  align-items: center;
+  min-height: var(--size-button-md);
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-full);
+  background: var(--ground-surface);
+  font-weight: var(--weight-medium);
+  /* Off the screen until the keyboard reaches it. */
+  transform: translateY(-200%);
+}
+
+.skip-link:focus-visible {
+  transform: none;
+}
+
+.page {
+  width: 100%;
+  max-width: calc(var(--size-content-max) + var(--gutter-start) + var(--gutter-end));
+  margin: 0 auto;
+  /* Room at the foot for the bottom bar, so the last line is never under it. */
+  padding: var(--space-6) var(--gutter-end) calc(var(--size-bottom-bar) + env(safe-area-inset-bottom) + var(--space-8)) var(--gutter-start);
+}
+
+/* Focus lands here after a move between screens, for a screen reader. It needs no ring. */
+.page:focus {
+  outline: none;
+}
+
+.page-title {
+  font: var(--type-title1);
+  letter-spacing: var(--type-title1-tracking);
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+
+.page-lead {
+  max-width: var(--size-reading-max);
+  margin-top: var(--space-2);
+  color: var(--text-muted);
+  font: var(--type-lead);
+  letter-spacing: var(--type-lead-tracking);
+  text-wrap: balance;
+}
+
+.section-title {
+  font: var(--type-title3);
+  letter-spacing: var(--type-title3-tracking);
+}
+
+/* The identity colour of a fund, set once on whatever is about that fund. */
+.fund-blue {
+  --fund: var(--fund-blue);
+}
+.fund-orange {
+  --fund: var(--fund-orange);
+}
+.fund-teal {
+  --fund: var(--fund-teal);
+}
+.fund-violet {
+  --fund: var(--fund-violet);
+}
+.fund-magenta {
+  --fund: var(--fund-magenta);
+}
+
+.fund-dot {
+  flex: none;
+  width: var(--space-3);
+  height: var(--space-3);
+  border-radius: 50%;
+  background: var(--fund);
+}
+
+@media (min-width: 640px) {
+  .page {
+    padding-top: var(--space-8);
+    padding-bottom: var(--space-16);
+  }
+}
+
+@media (min-width: 1024px) {
+  .page {
+    padding-top: var(--space-12);
+  }
+}

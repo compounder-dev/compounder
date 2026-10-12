@@ -3,10 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
   "scripts": {
+    "tokens": "node scripts/tokens.mjs",
     "engine": "cargo build -p compounder-wasm --target wasm32-unknown-unknown --release && cp ../target/wasm32-unknown-unknown/release/compounder_wasm.wasm src/engine.wasm",
-    "dev": "npm run engine && vite --host 127.0.0.1",
-    "build": "npm run engine && tsc --noEmit && vite build"
+    "dev": "npm run tokens && npm run engine && vite --host 127.0.0.1",
+    "check": "node scripts/check-contrast.mjs && node scripts/check-styles.mjs",
+    "test": "node --test \"src/**/*.test.mjs\" \"scripts/*.test.mjs\"",
+    "build": "npm run tokens && npm run engine && npm run check && tsc --noEmit && npm test && vite build && node scripts/check-pages.mjs && node scripts/check-budget.mjs"
   },
   "dependencies": {
     "@fontsource-variable/inter-tight": "^5.2.5",

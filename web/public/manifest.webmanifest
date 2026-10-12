@@ -1,7 +1,7 @@
 {
   "name": "Compounder",
   "short_name": "Compounder",
-  "description": "Pick a portfolio of stocks and hard assets, and let it rebalance itself.",
+  "description": "Pick a fund of stocks and hard assets, and let it keep itself in balance.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

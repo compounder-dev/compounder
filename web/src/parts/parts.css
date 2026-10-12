@@ -1,0 +1,887 @@
+/* The parts. Each has every state drawn. Values come from tokens.css only. */
+
+/* ---- Button and IconButton ---- */
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--size-button-md);
+  padding: var(--space-2) var(--space-6);
+  border: var(--size-hairline) solid transparent;
+  border-radius: var(--radius-full);
+  font: var(--type-body);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--type-body-tracking);
+  text-align: center;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background-color var(--duration-state) var(--easing-standard),
+    transform var(--duration-press) var(--easing-standard);
+}
+
+.button-lg {
+  min-height: var(--size-button-lg);
+  padding-inline: var(--space-8);
+}
+
+.button-full {
+  width: 100%;
+}
+
+.button:active {
+  transform: scale(var(--press-scale));
+}
+
+.button-primary {
+  background: var(--action-fill);
+  color: var(--text-on-action);
+}
+
+.button-primary:active {
+  background: var(--action-fill-press);
+}
+
+.button-secondary,
+.button-danger {
+  border-color: var(--stroke-hairline);
+  background: var(--ground-surface);
+  color: var(--text-primary);
+}
+
+.button-danger {
+  color: var(--status-loss);
+}
+
+.button-ghost {
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.button-secondary:active,
+.button-danger:active,
+.button-ghost:active {
+  background: var(--ground-hover);
+}
+
+/* Off is grey, never a faded gold. */
+.button:disabled {
+  border-color: transparent;
+  background: var(--ground-hover);
+  color: var(--text-disabled);
+  cursor: not-allowed;
+  transform: none;
+}
+
+.button[aria-busy='true'] {
+  cursor: progress;
+  transform: none;
+}
+
+.spinner {
+  flex: none;
+  width: var(--size-icon-sm);
+  height: var(--size-icon-sm);
+  border: var(--size-focus-width) solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin calc(var(--duration-skeleton) / 2) linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.icon-button {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: var(--size-button-md);
+  height: var(--size-button-md);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background-color var(--duration-state) var(--easing-standard),
+    transform var(--duration-press) var(--easing-standard);
+}
+
+.icon-button-filled {
+  background: var(--ground-raised);
+}
+
+.icon-button:active {
+  background: var(--ground-hover);
+  transform: scale(var(--press-scale));
+}
+
+.icon-button:disabled {
+  background: transparent;
+  color: var(--text-disabled);
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Hover is for a pointer that can hover. A finger would leave it stuck on. */
+@media (hover: hover) {
+  .button-primary:hover:not(:disabled, :active) {
+    background: var(--action-fill-hover);
+  }
+
+  .button-secondary:hover:not(:disabled),
+  .button-danger:hover:not(:disabled),
+  .button-ghost:hover:not(:disabled),
+  .icon-button:hover:not(:disabled) {
+    background: var(--ground-hover);
+  }
+}
+
+/* ---- Link ---- */
+
+.link {
+  color: var(--action-text);
+  text-decoration: underline;
+  text-decoration-thickness: var(--size-hairline);
+  text-underline-offset: var(--space-1);
+}
+
+.link-standalone {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--size-target);
+  font-weight: var(--weight-medium);
+  text-decoration: none;
+}
+
+@media (hover: hover) {
+  .link:hover {
+    text-decoration: underline;
+    text-decoration-thickness: var(--size-focus-width);
+  }
+}
+
+/* ---- Card ---- */
+
+.card {
+  position: relative;
+  min-width: 0;
+  padding: var(--card-padding);
+  border-radius: var(--card-radius);
+  background: var(--ground-raised);
+}
+
+/* A wash of the fund's colour from the top edge. No glow, no border. */
+.card-strategy {
+  background: radial-gradient(120% 90% at 50% 0, color-mix(in srgb, var(--fund, transparent) var(--tint-card), var(--ground-raised)), var(--ground-raised));
+}
+
+.card-title {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  font: var(--type-title3);
+  letter-spacing: var(--type-title3-tracking);
+  overflow-wrap: anywhere;
+}
+
+/* The dot sits on the middle of the first line, however many lines the name takes. */
+.card-title .fund-dot {
+  margin-top: var(--space-2);
+}
+
+.card-link {
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.card-link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.card:has(.card-link) {
+  transition: transform var(--duration-state) var(--easing-standard);
+}
+
+.card:has(.card-link:focus-visible) {
+  outline: var(--size-focus-width) solid var(--focus-ring);
+  outline-offset: var(--size-focus-gap);
+}
+
+@media (hover: hover) {
+  .card:has(.card-link):hover {
+    transform: translateY(calc(var(--lift) * -1));
+  }
+}
+
+.card:has(.card-link:active) {
+  background: var(--ground-hover);
+  transform: none;
+}
+
+.card-stat {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.card-stat > :first-child {
+  color: var(--text-faint);
+  font: var(--type-caption);
+  letter-spacing: var(--type-caption-tracking);
+}
+
+/* ---- Row ---- */
+
+.rows {
+  display: grid;
+  gap: var(--row-gap);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: var(--size-row);
+  padding: var(--space-2) var(--space-4);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: var(--ground-raised);
+  text-align: left;
+}
+
+/* Inside a card a row steps up one layer. */
+.card .row {
+  background: var(--ground-surface);
+}
+
+.row-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* A name wraps to a second line. It is never cut. */
+.row-title {
+  overflow-wrap: anywhere;
+}
+
+.row-detail {
+  color: var(--text-faint);
+  font: var(--type-small);
+  letter-spacing: var(--type-small-tracking);
+  overflow-wrap: anywhere;
+}
+
+.row-trailing {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.row-trailing .number {
+  min-width: var(--space-12);
+  text-align: right;
+}
+
+.row-action {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color var(--duration-state) var(--easing-standard);
+}
+
+.row-action > .icon {
+  color: var(--text-faint);
+  transition: transform var(--duration-state) var(--easing-standard);
+}
+
+.row-action[aria-expanded='true'] > .icon {
+  transform: rotate(0.25turn);
+}
+
+@media (hover: hover) {
+  .row-action:hover {
+    background: var(--ground-hover);
+  }
+}
+
+.row-action:active,
+.card .row-action:active {
+  background: var(--ground-hover);
+}
+
+.mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--size-mark);
+  height: var(--size-mark);
+  border-radius: 50%;
+  background: var(--ground-hover);
+  color: var(--text-muted);
+  font: var(--type-small);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--type-small-tracking);
+}
+
+.bar {
+  flex: none;
+  width: var(--space-16);
+  height: var(--chart-bar-height);
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: var(--ground-hover);
+}
+
+.bar > span {
+  display: block;
+  width: calc(var(--share) * 1%);
+  height: 100%;
+  border-radius: inherit;
+  background: var(--fund, var(--text-muted));
+}
+
+/* ---- Number ---- */
+
+.number {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.number > .icon {
+  display: inline-block;
+  margin-right: var(--space-1);
+  vertical-align: middle;
+}
+
+.number-proportional {
+  font-variant-numeric: proportional-nums;
+}
+
+.number-caption {
+  font: var(--type-caption);
+  letter-spacing: var(--type-caption-tracking);
+}
+.number-small {
+  font: var(--type-small);
+  letter-spacing: var(--type-small-tracking);
+}
+.number-body {
+  font: var(--type-body);
+  letter-spacing: var(--type-body-tracking);
+}
+.number-title2 {
+  font: var(--type-title2);
+  letter-spacing: var(--type-title2-tracking);
+}
+.number-title1 {
+  font: var(--type-title1);
+  letter-spacing: var(--type-title1-tracking);
+}
+
+/* `font` resets the figures, so the rule is said again after it. */
+.number-caption,
+.number-small,
+.number-body,
+.number-title2,
+.number-title1 {
+  font-variant-numeric: tabular-nums;
+}
+
+.number-gain {
+  color: var(--status-gain);
+}
+.number-loss {
+  color: var(--status-loss);
+}
+.number-muted {
+  color: var(--text-muted);
+}
+
+/* A value that just changed sits on a pale wash for a moment. Digits never roll. */
+.number-moved-up,
+.number-moved-down {
+  border-radius: var(--space-1);
+  animation: wash var(--duration-value-wash) var(--easing-standard);
+}
+
+.number-moved-up {
+  --wash: var(--status-gain-wash);
+}
+.number-moved-down {
+  --wash: var(--status-loss-wash);
+}
+
+@keyframes wash {
+  from {
+    background: var(--wash);
+    box-shadow: 0 0 0 var(--space-1) var(--wash);
+  }
+}
+
+/* ---- Chip ---- */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--space-6);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--ground-hover);
+  color: var(--text-muted);
+  font: var(--type-caption);
+  letter-spacing: var(--type-caption-tracking);
+  white-space: nowrap;
+}
+
+.chip-dot {
+  width: var(--space-2);
+  height: var(--space-2);
+  margin: 0 var(--space-1);
+  border-radius: 50%;
+  background: var(--status-gain);
+}
+
+.chip-needs-you {
+  color: var(--action-text);
+}
+
+/* ---- Skeleton ---- */
+
+/* A line of a skeleton is as tall as the letters it stands for and sits in a line of the same height. */
+.skeleton {
+  --skeleton-rest: var(--ground-raised);
+  --skeleton-glint: var(--ground-hover);
+
+  display: inline-block;
+  height: calc(1lh - var(--space-2));
+  border-radius: var(--space-2);
+  background: linear-gradient(100deg, var(--skeleton-rest) 30%, var(--skeleton-glint) 50%, var(--skeleton-rest) 70%);
+  background-size: 300% 100%;
+  vertical-align: middle;
+  animation: shimmer var(--duration-skeleton) linear infinite;
+}
+
+/* On a card the resting tone is one layer up, so the line still shows. */
+.card .skeleton,
+.row .skeleton {
+  --skeleton-rest: var(--ground-hover);
+  --skeleton-glint: var(--ground-surface);
+}
+
+.skeleton-short {
+  width: 25%;
+}
+.skeleton-half {
+  width: 50%;
+}
+.skeleton-long {
+  width: 75%;
+}
+.skeleton-full {
+  width: 100%;
+}
+
+.skeleton-number {
+  width: var(--space-12);
+}
+
+.mark.skeleton {
+  height: var(--size-mark);
+  border-radius: 50%;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+/* ---- EmptyState and Banner ---- */
+
+.empty {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-4);
+  padding: var(--space-8) var(--card-padding);
+  border-radius: var(--card-radius);
+  background: var(--ground-raised);
+  color: var(--text-muted);
+  text-align: center;
+  text-wrap: balance;
+}
+
+.banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-card);
+  background: var(--ground-raised);
+}
+
+.banner > .icon {
+  color: var(--text-muted);
+}
+
+.banner-needs-you > .icon {
+  color: var(--action-text);
+}
+
+.banner-error > .icon {
+  color: var(--status-loss);
+}
+
+/* The sentence takes the line and the action drops under it when there is no room beside. */
+.banner > p {
+  flex: 1 1 60%;
+  min-width: 0;
+}
+
+/* ---- TopBar and BottomBar ---- */
+
+.top-bar {
+  padding-top: env(safe-area-inset-top);
+  border-bottom: var(--size-hairline) solid var(--stroke-hairline);
+}
+
+.top-bar-inner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  max-width: calc(var(--size-content-max) + var(--gutter-start) + var(--gutter-end));
+  height: var(--size-top-bar);
+  margin: 0 auto;
+  padding: 0 var(--gutter-end) 0 var(--gutter-start);
+}
+
+.wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--size-target);
+  font: var(--type-title3);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--type-title3-tracking);
+}
+
+.wordmark-mark {
+  width: var(--size-icon-lg);
+  height: var(--size-icon-lg);
+  color: var(--action-text);
+}
+
+.top-bar-nav {
+  display: none;
+  gap: var(--space-1);
+}
+
+.top-bar-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--size-target);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-full);
+  color: var(--text-muted);
+  transition:
+    background-color var(--duration-state) var(--easing-standard),
+    color var(--duration-state) var(--easing-standard);
+}
+
+.top-bar-link {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.top-bar-link[aria-current],
+.top-bar-link:active {
+  background: var(--ground-hover);
+  color: var(--text-primary);
+}
+
+.top-bar-end {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+.bottom-bar {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: var(--z-bar);
+  display: flex;
+  height: calc(var(--size-bottom-bar) + env(safe-area-inset-bottom));
+  padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  border-top: var(--size-hairline) solid var(--stroke-hairline);
+  background: var(--ground-page);
+}
+
+.tab {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  min-width: 0;
+  color: var(--text-faint);
+  font: var(--type-caption);
+  letter-spacing: var(--type-caption-tracking);
+  -webkit-tap-highlight-color: transparent;
+  /* The ring sits inside the bar, where the edge of the screen cannot cut it. */
+  outline-offset: calc(var(--size-focus-gap) * -2);
+}
+
+.tab-mark {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: var(--space-16);
+  height: var(--space-8);
+  border-radius: var(--radius-full);
+  transition: background-color var(--duration-state) var(--easing-standard);
+}
+
+.tab[aria-current] {
+  color: var(--text-primary);
+}
+
+.tab[aria-current] .tab-mark,
+.tab:active .tab-mark {
+  background: var(--ground-hover);
+}
+
+.tab-badge {
+  position: absolute;
+  top: var(--space-1);
+  right: var(--space-4);
+  width: var(--space-2);
+  height: var(--space-2);
+  border-radius: 50%;
+  background: var(--action-fill);
+}
+
+@media (hover: hover) {
+  .top-bar-link:hover {
+    color: var(--text-primary);
+  }
+}
+
+@media (min-width: 640px) {
+  .top-bar-nav {
+    display: flex;
+  }
+
+  .bottom-bar {
+    display: none;
+  }
+}
+
+/* ---- Sheet ---- */
+
+.sheet {
+  width: 100%;
+  max-width: 100%;
+  max-height: calc(100dvh - var(--space-12));
+  margin: auto 0 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-panel) var(--radius-panel) 0 0;
+  background: var(--ground-raised);
+  color: var(--text-primary);
+}
+
+.sheet-full {
+  height: calc(100dvh - var(--space-12));
+}
+
+.sheet::backdrop {
+  background: var(--ground-scrim);
+}
+
+.sheet-panel {
+  display: flex;
+  flex-direction: column;
+  max-height: inherit;
+  height: 100%;
+}
+
+.sheet-handle {
+  align-self: center;
+  flex: none;
+  width: var(--space-8);
+  height: var(--space-1);
+  margin-top: var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--stroke-control);
+}
+
+.sheet-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  /* Room on the right for the ring round the cross, inside the round corner. */
+  padding: var(--space-2) var(--space-4) var(--space-2) var(--space-6);
+}
+
+.sheet-title {
+  font: var(--type-title3);
+  letter-spacing: var(--type-title3-tracking);
+}
+
+/* The sheet does not scroll. Its body does, between the title and the pinned actions. */
+.sheet-body {
+  flex: 1;
+  min-height: var(--space-16);
+  padding: var(--space-2) var(--space-6) var(--space-6);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  transition: opacity var(--duration-state) var(--easing-standard);
+}
+
+.sheet:not(:has(.sheet-actions)) .sheet-body {
+  padding-bottom: calc(var(--space-6) + env(safe-area-inset-bottom));
+}
+
+.sheet[aria-busy='true'] .sheet-body {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.sheet-actions {
+  display: flex;
+  flex: none;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-6) calc(var(--space-4) + env(safe-area-inset-bottom));
+  border-top: var(--size-hairline) solid var(--stroke-hairline);
+}
+
+.sheet-actions > * {
+  flex: 1;
+}
+
+.sheet[data-phase='opening'] {
+  animation: sheet-rise var(--duration-sheet-in) var(--easing-enter);
+}
+
+.sheet[data-phase='closing'] {
+  animation: sheet-rise var(--duration-sheet-out) var(--easing-exit) reverse forwards;
+}
+
+.sheet[data-phase='opening']::backdrop {
+  animation: fade var(--duration-sheet-in) var(--easing-enter);
+}
+
+.sheet[data-phase='closing']::backdrop {
+  animation: fade var(--duration-sheet-out) var(--easing-exit) reverse forwards;
+}
+
+@keyframes sheet-rise {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes sheet-settle {
+  from {
+    opacity: 0;
+    transform: translateY(var(--space-4));
+  }
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+
+/* From tablet width up the same part is a dialog in the middle of the screen. */
+@media (min-width: 640px) {
+  .sheet {
+    max-width: var(--size-dialog-max);
+    max-height: calc(100dvh - var(--space-16));
+    margin: auto;
+    border-radius: var(--radius-panel);
+  }
+
+  .sheet-full {
+    height: calc(100dvh - var(--space-16));
+  }
+
+  .sheet-handle {
+    display: none;
+  }
+
+  .sheet-head {
+    padding-top: var(--space-4);
+  }
+
+  .sheet[data-phase='opening'] {
+    animation-name: sheet-settle;
+  }
+
+  .sheet[data-phase='closing'] {
+    animation-name: sheet-settle;
+  }
+}
+
+/* ---- Motion follows the device ---- */
+
+/* Nothing slides, rises, shrinks or shimmers. Fades stay, because they carry no movement. */
+@media (prefers-reduced-motion: reduce) {
+  .button,
+  .icon-button,
+  .card:has(.card-link),
+  .row-action > .icon {
+    transition-property: background-color;
+  }
+
+  .button:active,
+  .icon-button:active,
+  .card:has(.card-link):hover {
+    transform: none;
+  }
+
+  .skeleton {
+    animation: none;
+  }
+
+  .spinner {
+    animation: pulse var(--duration-skeleton) linear infinite;
+  }
+
+  .sheet[data-phase='opening'],
+  .sheet[data-phase='closing'] {
+    animation-name: fade;
+  }
+}

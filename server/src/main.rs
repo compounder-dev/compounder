@@ -1,5 +1,8 @@
 //! Local web backend: the strategy engine behind an HTTP API, plus the built
-//! web app served from one port.
+//! web app served from one port. Every address of the app is answered with a
+//! whole page: the first screen's words and numbers are in the first response.
+
+mod page;
 
 mod backtest;
 mod prices;
@@ -13,10 +16,11 @@ use std::{
 
 use axum::{
     body::Bytes,
-    extract::{rejection::JsonRejection, Request, State},
-    http::{header::CACHE_CONTROL, HeaderValue, StatusCode},
+    extract::{rejection::JsonRejection, DefaultBodyLimit, Path, Request, State},
+    handler::HandlerWithoutStateExt,
+    http::{header::CACHE_CONTROL, HeaderValue, StatusCode, Uri},
     middleware::{self, Next},
-    response::{IntoResponse, Response},
+    response::{Html, IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
@@ -25,9 +29,10 @@ use prices::Prices;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::sync::Semaphore;
-use tower_http::services::{ServeDir, ServeFile};
+use tower_http::services::ServeDir;
 
-const BIND: ([u8; 4], u16) = ([127, 0, 0, 1], 8787);
+/// The port to listen on, unless `PORT` names another.
+const DEFAULT_PORT: u16 = 8787;
 
 /// A token the app knows about. Symbol, name and decimals were read from the
 /// token contract itself.
@@ -80,7 +85,7 @@ fn starters() -> &'static Vec<Starter> {
 }
 
 /// One line of a resolved portfolio: an asset and its share.
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 struct Holding {
     asset_id: String,
     /// Null when the asset is not in the registry.
@@ -105,6 +110,38 @@ fn holdings(targets: BTreeMap<String, f64>) -> Vec<Holding> {
         .collect();
     rows.sort_by(|a, b| b.weight.total_cmp(&a.weight).then_with(|| a.asset_id.cmp(&b.asset_id)));
     rows
+}
+
+/// A starter as the app is sent it: its words, its strategy and what the strategy holds.
+#[derive(Serialize, Deserialize)]
+struct StarterView {
+    id: String,
+    name: String,
+    summary: String,
+    accent: String,
+    strategy: Strategy,
+    /// The same fund as a rule document, which is what a backtest takes.
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    rules: Value,
+    holdings: Vec<Holding>,
+}
+
+fn starter_view(starter: &Starter) -> Result<StarterView, ApiError> {
+    let targets = starter.strategy.targets().map_err(ApiError::invalid_strategy)?;
+    let rules = RuleStrategy::from_fixed(&starter.strategy).map_err(ApiError::invalid_strategy)?;
+    Ok(StarterView {
+        id: starter.id.clone(),
+        name: starter.name.clone(),
+        summary: starter.summary.clone(),
+        accent: starter.accent.clone(),
+        strategy: starter.strategy.clone(),
+        rules: rules.document(),
+        holdings: holdings(targets),
+    })
+}
+
+fn starter_views() -> Result<Vec<StarterView>, ApiError> {
+    starters().iter().map(starter_view).collect()
 }
 
 /// Every non-2xx response has this shape.
@@ -147,6 +184,15 @@ impl ApiError {
             issues: Vec::new(),
         }
     }
+
+    fn not_found(message: &str) -> Self {
+        Self {
+            status: StatusCode::NOT_FOUND,
+            code: "not_found",
+            message: message.into(),
+            issues: Vec::new(),
+        }
+    }
 }
 
 impl IntoResponse for ApiError {
@@ -178,22 +224,12 @@ async fn list_assets() -> Json<Value> {
 }
 
 async fn list_starters() -> ApiResult {
-    let mut out = Vec::new();
-    for starter in starters() {
-        let targets = starter.strategy.targets().map_err(ApiError::invalid_strategy)?;
-        let rules = RuleStrategy::from_fixed(&starter.strategy).map_err(ApiError::invalid_strategy)?;
-        out.push(json!({
-            "id": starter.id,
-            "name": starter.name,
-            "summary": starter.summary,
-            "accent": starter.accent,
-            "strategy": starter.strategy,
-            // The same fund as a rule document, which is what a backtest takes.
-            "rules": rules.document(),
-            "holdings": holdings(targets),
-        }));
-    }
-    Ok(Json(json!({ "starters": out })))
+    Ok(Json(json!({ "starters": starter_views()? })))
+}
+
+async fn one_starter(Path(id): Path<String>) -> ApiResult {
+    let starter = starters().iter().find(|starter| starter.id == id).ok_or_else(|| ApiError::not_found("no such starter"))?;
+    Ok(Json(json!({ "starter": starter_view(starter)? })))
 }
 
 /// Always 200: an invalid document is a normal answer here, with its problems listed.
@@ -228,13 +264,41 @@ fn turns() -> &'static Semaphore {
     TURNS.get_or_init(|| Semaphore::new(std::thread::available_parallelism().map_or(1, usize::from)))
 }
 
-async fn unknown_api_route() -> ApiError {
-    ApiError {
-        status: StatusCode::NOT_FOUND,
-        code: "not_found",
-        message: "no such route".into(),
-        issues: Vec::new(),
+/// The named events the app may log at this step. A name outside the list is refused.
+const EVENTS: [&str; 2] = ["home_seen", "starter_opened"];
+
+/// One line of the app's own log: what happened, on which screen, to which strategy or fund.
+/// There is no field for who, and an unknown field is refused, so none can creep in.
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct Event {
+    name: String,
+    screen: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    id: Option<String>,
+}
+
+/// The line an event is logged as, or why it is refused. Every part is a short plain word,
+/// so nothing a caller sends can break the log or hide in it.
+fn event_line(event: &Event) -> Result<String, ApiError> {
+    let plain = |text: &str| !text.is_empty() && text.len() <= 64 && text.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
+    if !EVENTS.contains(&event.name.as_str()) {
+        return Err(ApiError::invalid_request("no such event"));
     }
+    if !plain(&event.screen) || !event.id.as_deref().is_none_or(plain) {
+        return Err(ApiError::invalid_request("an event's screen and id are short plain words"));
+    }
+    Ok(format!("event {}", json!(event)))
+}
+
+async fn log_event(body: Result<Json<Event>, JsonRejection>) -> Result<StatusCode, ApiError> {
+    let Json(event) = body?;
+    println!("{}", event_line(&event)?);
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn unknown_api_route() -> ApiError {
+    ApiError::not_found("no such route")
 }
 
 /// Built assets carry a content hash in their name and never change, so they
@@ -256,31 +320,81 @@ fn web_dist() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../web/dist")
 }
 
-/// The whole app. `prices` is the price store backtests run on, when there is one.
-fn app(prices: Option<Arc<Prices>>) -> Router {
-    let dist = web_dist();
-    // Unknown paths fall back to the app shell so client-side routes reload cleanly.
-    let web = ServeDir::new(&dist).fallback(ServeFile::new(dist.join("index.html")));
+/// What an address shows, looked up before a word of the page is written.
+enum Lookup {
+    Home(Vec<StarterView>),
+    Starter(Box<StarterView>),
+    NotFound,
+    /// The data for the page could not be made.
+    Broke,
+}
+
+fn look_up(path: &str) -> Lookup {
+    match page::route(path) {
+        page::Route::Home => starter_views().map_or(Lookup::Broke, Lookup::Home),
+        page::Route::Starter(id) => match starters().iter().find(|starter| starter.id == id) {
+            Some(starter) => starter_view(starter).map_or(Lookup::Broke, |view| Lookup::Starter(Box::new(view))),
+            None => Lookup::NotFound,
+        },
+        page::Route::NotFound => Lookup::NotFound,
+    }
+}
+
+/// The whole page for an address and the status that tells a machine what a person will read.
+fn respond(shell: &str, path: &str, lookup: &Lookup) -> (StatusCode, Html<String>) {
+    let (status, screen) = match lookup {
+        Lookup::Home(views) => (StatusCode::OK, page::Screen::Home(views)),
+        Lookup::Starter(view) => (StatusCode::OK, page::Screen::Starter(view)),
+        Lookup::NotFound => (StatusCode::NOT_FOUND, page::Screen::NotFound),
+        Lookup::Broke => (StatusCode::INTERNAL_SERVER_ERROR, page::Screen::Broke),
+    };
+    (status, Html(page::document(shell, path, &screen)))
+}
+
+/// Every address that is not a file or an API route: one of the app's screens, or the not-found page.
+/// The shell is read on each request, so a new build of the web app is picked up at once.
+async fn page_for(shell_file: PathBuf, uri: Uri) -> (StatusCode, Html<String>) {
+    let built = tokio::fs::read_to_string(shell_file).await.unwrap_or_default();
+    respond(page::shell_or_bare(&built), uri.path(), &look_up(uri.path()))
+}
+
+/// The API and the web app built into `dist`, on one router. `prices` is the price store
+/// backtests run on, when there is one.
+fn router(dist: PathBuf, prices: Option<Arc<Prices>>) -> Router {
+    let shell_file = dist.join("index.html");
+    let pages = move |uri: Uri| page_for(shell_file.clone(), uri);
+    // Files the build put beside the shell, such as the icon. Anything else is a page.
+    let web = ServeDir::new(&dist).append_index_html_on_directories(false).fallback(pages.into_service());
+    // The build leaves a compressed copy beside each asset, and a browser that asks for one gets it.
+    let assets = ServeDir::new(dist.join("assets")).precompressed_br().precompressed_gzip();
     let api = Router::new()
         .route("/assets", get(list_assets))
         .route("/starters", get(list_starters))
+        .route("/starters/{id}", get(one_starter))
         .route("/strategy/validate", post(validate_strategy))
         .route("/strategy/targets", post(strategy_targets))
         .route("/backtest", post(backtest_strategy))
+        // An event is a few words. Anything larger is not one.
+        .route("/events", post(log_event).layer(DefaultBodyLimit::max(512)))
         .fallback(unknown_api_route)
         .with_state(prices);
     Router::new()
         .route("/health", get(health))
         .nest("/v1", api)
-        // A missing asset is a 404, never the app shell under an asset's name.
-        .nest_service("/assets", ServeDir::new(dist.join("assets")))
+        // A missing asset is a 404, never a page under an asset's name.
+        .nest_service("/assets", assets)
         .fallback_service(web)
         .layer(middleware::from_fn(cache_policy))
 }
 
+fn app(prices: Option<Arc<Prices>>) -> Router {
+    router(web_dist(), prices)
+}
+
 #[tokio::main]
 async fn main() {
-    let address = SocketAddr::from(BIND);
+    let port = std::env::var("PORT").ok().and_then(|port| port.parse().ok()).unwrap_or(DEFAULT_PORT);
+    let address = SocketAddr::from(([127, 0, 0, 1], port));
     let listener = tokio::net::TcpListener::bind(address)
         .await
         .unwrap_or_else(|e| panic!("cannot bind {address}: {e}"));
@@ -297,6 +411,44 @@ mod tests {
     use axum::http::header;
     use tower::ServiceExt;
 
+    /// A web build made for one test, so no test depends on what happens to be in `web/dist`.
+    struct Build(PathBuf);
+
+    impl Build {
+        fn new(name: &str, files: &[(&str, &str)]) -> Self {
+            let dir = std::env::temp_dir().join(format!("compounder-server-test-{}-{name}", std::process::id()));
+            for (file, text) in files {
+                let path = dir.join(file);
+                std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+                std::fs::write(path, text).unwrap();
+            }
+            Build(dir)
+        }
+
+        async fn get(&self, path: &str, accept_encoding: Option<&str>) -> Response {
+            let mut request = Request::builder().uri(path);
+            if let Some(encoding) = accept_encoding {
+                request = request.header(header::ACCEPT_ENCODING, encoding);
+            }
+            router(self.0.clone(), None).oneshot(request.body(Body::empty()).unwrap()).await.unwrap()
+        }
+    }
+
+    impl Drop for Build {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// The server with no web build at all: pages come in the bare shell.
+    fn unbuilt(prices: Option<Arc<Prices>>) -> Router {
+        router(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("no-web-build-here"), prices)
+    }
+
+    async fn text_of(response: Response) -> String {
+        String::from_utf8(axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap().to_vec()).unwrap()
+    }
+
     async fn call(method: &str, path: &str, body: Option<Value>) -> (StatusCode, Value) {
         call_with(None, method, path, body).await
     }
@@ -310,10 +462,25 @@ mod tests {
             }
             None => Body::empty(),
         };
-        let response = app(prices).oneshot(request.body(body).unwrap()).await.unwrap();
+        let response = unbuilt(prices).oneshot(request.body(body).unwrap()).await.unwrap();
         let status = response.status();
         let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         (status, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
+    }
+
+    /// A page as a browser gets it: the status, the type and the text.
+    async fn page(path: &str) -> (StatusCode, String, String) {
+        let request = Request::builder().uri(path).body(Body::empty()).unwrap();
+        let response = unbuilt(None).oneshot(request).await.unwrap();
+        let status = response.status();
+        let kind = response.headers().get(header::CONTENT_TYPE).map(|value| value.to_str().unwrap().to_string()).unwrap_or_default();
+        (status, kind, text_of(response).await)
+    }
+
+    /// The data a page carries for the app, read back out of the page.
+    fn seed_in(text: &str) -> Value {
+        let data = text.split(r#"<script type="application/json" id="seed">"#).nth(1).expect("the page carries its data");
+        serde_json::from_str(data.split("</script>").next().unwrap()).expect("the data is valid")
     }
 
     fn two_asset_strategy(first: &str, second: &str) -> Value {
@@ -410,15 +577,174 @@ mod tests {
 
     #[tokio::test]
     async fn only_hashed_assets_are_cached_for_good() {
+        let build = Build::new("cache", &[("assets/app-1a2b.js", "let a")]);
+        let dist = || build.0.clone();
         let policy = |path: &'static str| async move {
             let request = Request::builder().uri(path).body(Body::empty()).unwrap();
-            let response = app(None).oneshot(request).await.unwrap();
+            let response = router(dist(), None).oneshot(request).await.unwrap();
             response.headers().get(CACHE_CONTROL).map(|value| value.to_str().unwrap().to_string())
         };
         assert_eq!(policy("/v1/starters").await.as_deref(), Some("no-cache"));
         assert_eq!(policy("/").await.as_deref(), Some("no-cache"));
+        assert_eq!(policy("/s/hard-assets").await.as_deref(), Some("no-cache"));
+        assert_eq!(policy("/assets/app-1a2b.js").await.as_deref(), Some("public, max-age=31536000, immutable"));
         // A missing asset must not be pinned in a browser's cache.
         assert_eq!(policy("/assets/missing-0000.js").await.as_deref(), Some("no-cache"));
+    }
+
+    #[tokio::test]
+    async fn pages_are_written_into_the_built_shell_and_files_beside_it_are_served() {
+        let shell = r#"<html><head><title>Compounder</title><link rel="stylesheet" href="/assets/app-1a2b.css"></head><body><div id="root"><!--page--></div><!--seed--><script type="module" src="/assets/app-1a2b.js"></script></body></html>"#;
+        let build = Build::new("shell", &[("index.html", shell), ("icon.svg", "<svg/>"), ("assets/app-1a2b.js", "let a")]);
+        let page = text_of(build.get("/s/hard-assets", None).await).await;
+        assert!(page.contains(r#"<link rel="stylesheet" href="/assets/app-1a2b.css">"#));
+        assert!(page.contains(r#"<div id="root"><a class="skip-link""#));
+        assert!(page.contains(r#"<script type="application/json" id="seed">{"resources":{"/v1/starters/hard-assets":"#));
+        assert_eq!(text_of(build.get("/icon.svg", None).await).await, "<svg/>");
+        // A folder of the build is not a page of the app.
+        assert_eq!(build.get("/assets", None).await.status(), StatusCode::NOT_FOUND);
+        assert_eq!(build.get("/assets/", None).await.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn a_shell_from_an_older_build_still_gets_the_words() {
+        let build = Build::new("old-shell", &[("index.html", r#"<html><head><title>Compounder</title></head><body><div id="root"></div></body></html>"#)]);
+        let response = build.get("/", None).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(text_of(response).await.contains("Choose your fund"));
+    }
+
+    #[tokio::test]
+    async fn an_asset_is_sent_compressed_to_a_browser_that_asks() {
+        let build = Build::new("compressed", &[("assets/app-1a2b.js", "plain"), ("assets/app-1a2b.js.br", "smaller"), ("assets/app-1a2b.js.gz", "small")]);
+        let encoding = |response: &Response| response.headers().get(header::CONTENT_ENCODING).map(|value| value.to_str().unwrap().to_string());
+
+        let response = build.get("/assets/app-1a2b.js", Some("gzip, br")).await;
+        assert_eq!(encoding(&response).as_deref(), Some("br"));
+        assert_eq!(response.headers()[header::CONTENT_TYPE], "text/javascript");
+        assert_eq!(text_of(response).await, "smaller");
+
+        let response = build.get("/assets/app-1a2b.js", Some("gzip")).await;
+        assert_eq!(encoding(&response).as_deref(), Some("gzip"));
+
+        let response = build.get("/assets/app-1a2b.js", None).await;
+        assert_eq!(encoding(&response), None);
+        assert_eq!(text_of(response).await, "plain");
+    }
+
+    #[tokio::test]
+    async fn one_starter_is_served_by_its_id() {
+        let (status, body) = call("GET", "/v1/starters/hard-assets", None).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(body["starter"]["name"], "Hard Assets");
+        let (_, list) = call("GET", "/v1/starters", None).await;
+        let listed = list["starters"].as_array().unwrap().iter().find(|starter| starter["id"] == "hard-assets").unwrap();
+        assert_eq!(&body["starter"], listed);
+
+        let (status, body) = call("GET", "/v1/starters/no-such-fund", None).await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert_eq!(body["error"]["code"], "not_found");
+    }
+
+    #[tokio::test]
+    async fn every_starter_has_an_id_an_address_can_carry_and_one_of_the_five_colours() {
+        for starter in starters() {
+            assert_eq!(page::route(&format!("/s/{}", starter.id)), page::Route::Starter(starter.id.clone()));
+            assert!(["blue", "orange", "teal", "violet", "magenta"].contains(&starter.accent.as_str()), "{}: {}", starter.id, starter.accent);
+        }
+    }
+
+    #[tokio::test]
+    async fn the_home_page_has_every_starter_in_its_first_response() {
+        let (status, kind, text) = page("/").await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(kind.starts_with("text/html"), "{kind}");
+        assert!(text.contains("<title>Compounder</title>"));
+        assert!(text.contains("Choose your fund"));
+        for starter in starters() {
+            assert!(text.contains(&format!(r#"<a class="card-link" href="/s/{}">{}</a>"#, starter.id, starter.name)), "{}", starter.id);
+        }
+        // The same answer the app would otherwise have to ask for.
+        let (_, asked) = call("GET", "/v1/starters", None).await;
+        assert_eq!(seed_in(&text)["resources"]["/v1/starters"], asked);
+        assert!(!text.contains(page::PAGE_PLACE) && !text.contains(page::SEED_PLACE));
+    }
+
+    #[tokio::test]
+    async fn a_starter_page_has_its_words_and_numbers_in_its_first_response() {
+        let (status, _, text) = page("/s/hard-assets").await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(text.contains("<title>Hard Assets · Compounder</title>"));
+        assert!(text.contains(r#"<span class="fund-dot" aria-hidden="true"></span>Hard Assets</h1>"#));
+        assert!(text.contains("When a holding drifts 10% from its target"));
+        assert!(text.contains("Adding money is not open yet."));
+        let (_, asked) = call("GET", "/v1/starters/hard-assets", None).await;
+        let holdings = asked["starter"]["holdings"].as_array().unwrap();
+        assert!(text.contains(&format!(r#"<dt>Holdings</dt><dd><span class="number">{}</span></dd>"#, holdings.len())));
+        // One row for each holding, each with its share.
+        assert_eq!(text.matches(r#"<li class="row row-asset">"#).count(), holdings.len());
+        let largest = page::percent(holdings[0]["weight"].as_f64().unwrap(), false);
+        assert!(text.contains(&format!(r#"<span class="number">{largest}</span>"#)), "{largest}");
+        assert_eq!(seed_in(&text)["resources"]["/v1/starters/hard-assets"], asked);
+    }
+
+    #[tokio::test]
+    async fn an_address_that_matches_nothing_is_the_not_found_page_with_a_404() {
+        for path in ["/nope", "/s/no-such-fund", "/s/", "/s/hard-assets/more", "/s/hard%2Dassets", "/explore"] {
+            let (status, kind, text) = page(path).await;
+            assert_eq!(status, StatusCode::NOT_FOUND, "{path}");
+            assert!(kind.starts_with("text/html"), "{path}: {kind}");
+            assert!(text.contains("That page does not exist."), "{path}");
+            assert!(text.contains("<title>Page not found · Compounder</title>"), "{path}");
+        }
+        // The app is told the starter is not there, so it does not ask again.
+        let (_, _, text) = page("/s/no-such-fund").await;
+        assert!(seed_in(&text)["resources"]["/v1/starters/no-such-fund"].is_null());
+        assert_eq!(seed_in(&text)["resources"].as_object().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn a_page_that_could_not_be_made_says_so_with_a_500() {
+        let (status, Html(text)) = respond(page::BARE_SHELL, "/s/hard-assets", &Lookup::Broke);
+        assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert!(text.contains("Something went wrong on our side."));
+        assert!(text.contains(r#"<a class="button button-primary" href="/s/hard-assets">Try again</a>"#));
+        assert_eq!(seed_in(&text)["broke"], true);
+    }
+
+    #[tokio::test]
+    async fn a_named_event_is_logged_and_anything_else_is_refused() {
+        let (status, _) = call("POST", "/v1/events", Some(json!({ "name": "home_seen", "screen": "home" }))).await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        let (status, _) = call("POST", "/v1/events", Some(json!({ "name": "starter_opened", "screen": "starter", "id": "hard-assets" }))).await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+
+        let refused = [
+            json!({ "name": "made_up", "screen": "home" }),
+            json!({ "name": "home_seen" }),
+            json!({ "name": "home_seen", "screen": "" }),
+            json!({ "name": "home_seen", "screen": "home\nevent forged" }),
+            json!({ "name": "starter_opened", "screen": "starter", "id": "a b" }),
+            json!({ "name": "home_seen", "screen": "home", "email": "someone@example.com" }),
+            json!({ "name": "home_seen", "screen": "x".repeat(65) }),
+        ];
+        for body in refused {
+            let (status, answer) = call("POST", "/v1/events", Some(body.clone())).await;
+            assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+            assert_eq!(answer["error"]["code"], "invalid_request", "{body}");
+        }
+        // A body that would be a fine event, padded past what an event can be.
+        let padded = format!(r#"{{"name":"home_seen","screen":"home"}}{}"#, " ".repeat(600));
+        let request = Request::builder().method("POST").uri("/v1/events").header(header::CONTENT_TYPE, "application/json").body(Body::from(padded)).unwrap();
+        assert_eq!(unbuilt(None).oneshot(request).await.unwrap().status(), StatusCode::UNPROCESSABLE_ENTITY);
+    }
+
+    #[test]
+    fn an_event_is_one_line_with_no_room_for_who() {
+        let event = Event { name: "starter_opened".into(), screen: "starter".into(), id: Some("hard-assets".into()) };
+        assert_eq!(event_line(&event).ok().as_deref(), Some(r#"event {"id":"hard-assets","name":"starter_opened","screen":"starter"}"#));
+        let event = Event { name: "home_seen".into(), screen: "home".into(), id: None };
+        assert_eq!(event_line(&event).ok().as_deref(), Some(r#"event {"name":"home_seen","screen":"home"}"#));
     }
 
     #[tokio::test]

@@ -4,7 +4,7 @@
    "id": "magnificent-seven",
    "name": "The Magnificent Seven",
    "summary": "The seven companies behind most of the market's growth this decade, in equal parts.",
-   "accent": "amber",
+   "accent": "orange",
    "strategy": {
     "entry": {
      "blockType": "topLevel",
@@ -167,7 +167,7 @@
    "id": "hard-assets",
    "name": "Hard Assets",
    "summary": "Gold first, then silver, platinum and the companies that pull value out of the ground.",
-   "accent": "green",
+   "accent": "teal",
    "strategy": {
     "entry": {
      "blockType": "topLevel",

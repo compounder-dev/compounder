@@ -1,0 +1,445 @@
+[
+ {
+  "name": "home",
+  "address": "/",
+  "resources": {
+   "/v1/starters": {
+    "starters": [
+     {
+      "id": "six-makers",
+      "name": "Six Makers",
+      "summary": "Six companies that make things, with the first one weighted most.",
+      "accent": "orange",
+      "strategy": {
+       "entry": {
+        "blockType": "topLevel",
+        "name": "Six Makers",
+        "blockIdForInstance": "six-top",
+        "parentNodeId": "root",
+        "children": {
+         "blockType": "weight",
+         "weightType": "equal",
+         "weightings": [
+          "0",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0"
+         ],
+         "blockIdForInstance": "six-weights",
+         "parentNodeId": "six-top",
+         "children": [
+          {
+           "blockType": "asset",
+           "assetId": "0x0000000000000000000000000000000000000001:56",
+           "blockIdForInstance": "six-0",
+           "parentNodeId": "six-weights"
+          },
+          {
+           "blockType": "asset",
+           "assetId": "0x0000000000000000000000000000000000000002:56",
+           "blockIdForInstance": "six-1",
+           "parentNodeId": "six-weights"
+          },
+          {
+           "blockType": "asset",
+           "assetId": "0x0000000000000000000000000000000000000003:56",
+           "blockIdForInstance": "six-2",
+           "parentNodeId": "six-weights"
+          },
+          {
+           "blockType": "asset",
+           "assetId": "0x0000000000000000000000000000000000000004:56",
+           "blockIdForInstance": "six-3",
+           "parentNodeId": "six-weights"
+          },
+          {
+           "blockType": "asset",
+           "assetId": "0x0000000000000000000000000000000000000005:56",
+           "blockIdForInstance": "six-4",
+           "parentNodeId": "six-weights"
+          },
+          {
+           "blockType": "asset",
+           "assetId": "0x0000000000000000000000000000000000000006:56",
+           "blockIdForInstance": "six-5",
+           "parentNodeId": "six-weights"
+          }
+         ]
+        }
+       },
+       "version": "1.0.0",
+       "tradingSettings": {
+        "type": "threshold",
+        "triggerPercentage": 7.5
+       }
+      },
+      "holdings": [
+       {
+        "asset_id": "0x0000000000000000000000000000000000000001:56",
+        "symbol": "AAAon",
+        "name": "Alpha Works (Tokenized)",
+        "weight": 0.4
+       },
+       {
+        "asset_id": "0x0000000000000000000000000000000000000002:56",
+        "symbol": "BBBon",
+        "name": "Beta Mills (Tokenized)",
+        "weight": 0.2
+       },
+       {
+        "asset_id": "0x0000000000000000000000000000000000000003:56",
+        "symbol": "CCCon",
+        "name": "Gamma Tools (Tokenized)",
+        "weight": 0.142857142857
+       },
+       {
+        "asset_id": "0x0000000000000000000000000000000000000004:56",
+        "symbol": "DDDon",
+        "name": "Delta Parts (Tokenized)",
+        "weight": 0.125
+       },
+       {
+        "asset_id": "0x0000000000000000000000000000000000000005:56",
+        "symbol": "EEEon",
+        "name": "Epsilon Forge (Tokenized)",
+        "weight": 0.0875
+       },
+       {
+        "asset_id": "0x0000000000000000000000000000000000000006:56",
+        "symbol": "FFFon",
+        "name": "Zeta Line (Tokenized)",
+        "weight": 0.044642857143
+       }
+      ]
+     },
+     {
+      "id": "odd_one-2",
+      "name": "Salt & <Steel> \"Co\"",
+      "summary": "It's a test of 'quotes', <tags> & ampersands.",
+      "accent": "green",
+      "strategy": {
+       "entry": {
+        "blockType": "topLevel",
+        "name": "Odd",
+        "blockIdForInstance": "odd-top",
+        "parentNodeId": "root",
+        "children": {
+         "blockType": "weight",
+         "weightType": "equal",
+         "weightings": [
+          "0",
+          "0",
+          "0",
+          "0"
+         ],
+         "blockIdForInstance": "odd-weights",
+         "parentNodeId": "odd-top",
+         "children": [
+          {
+           "blockType": "asset",
+           "assetId": "0x000000000000000000000000000000000000000b:56",
+           "blockIdForInstance": "odd-0",
+           "parentNodeId": "odd-weights"
+          },
+          {
+           "blockType": "asset",
+           "assetId": "0x000000000000000000000000000000000000000c:56",
+           "blockIdForInstance": "odd-1",
+           "parentNodeId": "odd-weights"
+          },
+          {
+           "blockType": "asset",
+           "assetId": "0x000000000000000000000000000000000000000d:56",
+           "blockIdForInstance": "odd-2",
+           "parentNodeId": "odd-weights"
+          },
+          {
+           "blockType": "asset",
+           "assetId": "0x000000000000000000000000000000000000000e:56",
+           "blockIdForInstance": "odd-3",
+           "parentNodeId": "odd-weights"
+          }
+         ]
+        }
+       },
+       "version": "1.0.0",
+       "tradingSettings": {
+        "type": "calendar",
+        "frequency": "weekly"
+       }
+      },
+      "holdings": [
+       {
+        "asset_id": "0x000000000000000000000000000000000000000b:56",
+        "symbol": "GLDon",
+        "name": "Gold & Sons (Tokenized)",
+        "weight": 0.99875
+       },
+       {
+        "asset_id": "0x000000000000000000000000000000000000000c:56",
+        "symbol": "Éon",
+        "name": "École <Nord>",
+        "weight": 0.00125
+       },
+       {
+        "asset_id": "0x000000000000000000000000000000000000000d:56",
+        "symbol": null,
+        "name": null,
+        "weight": 4e-05
+       },
+       {
+        "asset_id": "0x000000000000000000000000000000000000000e:56",
+        "symbol": "ZERO",
+        "name": "Nothing Yet",
+        "weight": 0
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "home-empty",
+  "address": "/",
+  "resources": {
+   "/v1/starters": {
+    "starters": []
+   }
+  }
+ },
+ {
+  "name": "starter",
+  "address": "/s/six-makers",
+  "resources": {
+   "/v1/starters/six-makers": {
+    "starter": {
+     "id": "six-makers",
+     "name": "Six Makers",
+     "summary": "Six companies that make things, with the first one weighted most.",
+     "accent": "orange",
+     "strategy": {
+      "entry": {
+       "blockType": "topLevel",
+       "name": "Six Makers",
+       "blockIdForInstance": "six-top",
+       "parentNodeId": "root",
+       "children": {
+        "blockType": "weight",
+        "weightType": "equal",
+        "weightings": [
+         "0",
+         "0",
+         "0",
+         "0",
+         "0",
+         "0"
+        ],
+        "blockIdForInstance": "six-weights",
+        "parentNodeId": "six-top",
+        "children": [
+         {
+          "blockType": "asset",
+          "assetId": "0x0000000000000000000000000000000000000001:56",
+          "blockIdForInstance": "six-0",
+          "parentNodeId": "six-weights"
+         },
+         {
+          "blockType": "asset",
+          "assetId": "0x0000000000000000000000000000000000000002:56",
+          "blockIdForInstance": "six-1",
+          "parentNodeId": "six-weights"
+         },
+         {
+          "blockType": "asset",
+          "assetId": "0x0000000000000000000000000000000000000003:56",
+          "blockIdForInstance": "six-2",
+          "parentNodeId": "six-weights"
+         },
+         {
+          "blockType": "asset",
+          "assetId": "0x0000000000000000000000000000000000000004:56",
+          "blockIdForInstance": "six-3",
+          "parentNodeId": "six-weights"
+         },
+         {
+          "blockType": "asset",
+          "assetId": "0x0000000000000000000000000000000000000005:56",
+          "blockIdForInstance": "six-4",
+          "parentNodeId": "six-weights"
+         },
+         {
+          "blockType": "asset",
+          "assetId": "0x0000000000000000000000000000000000000006:56",
+          "blockIdForInstance": "six-5",
+          "parentNodeId": "six-weights"
+         }
+        ]
+       }
+      },
+      "version": "1.0.0",
+      "tradingSettings": {
+       "type": "threshold",
+       "triggerPercentage": 7.5
+      }
+     },
+     "holdings": [
+      {
+       "asset_id": "0x0000000000000000000000000000000000000001:56",
+       "symbol": "AAAon",
+       "name": "Alpha Works (Tokenized)",
+       "weight": 0.4
+      },
+      {
+       "asset_id": "0x0000000000000000000000000000000000000002:56",
+       "symbol": "BBBon",
+       "name": "Beta Mills (Tokenized)",
+       "weight": 0.2
+      },
+      {
+       "asset_id": "0x0000000000000000000000000000000000000003:56",
+       "symbol": "CCCon",
+       "name": "Gamma Tools (Tokenized)",
+       "weight": 0.142857142857
+      },
+      {
+       "asset_id": "0x0000000000000000000000000000000000000004:56",
+       "symbol": "DDDon",
+       "name": "Delta Parts (Tokenized)",
+       "weight": 0.125
+      },
+      {
+       "asset_id": "0x0000000000000000000000000000000000000005:56",
+       "symbol": "EEEon",
+       "name": "Epsilon Forge (Tokenized)",
+       "weight": 0.0875
+      },
+      {
+       "asset_id": "0x0000000000000000000000000000000000000006:56",
+       "symbol": "FFFon",
+       "name": "Zeta Line (Tokenized)",
+       "weight": 0.044642857143
+      }
+     ]
+    }
+   }
+  }
+ },
+ {
+  "name": "starter-odd",
+  "address": "/s/odd_one-2",
+  "resources": {
+   "/v1/starters/odd_one-2": {
+    "starter": {
+     "id": "odd_one-2",
+     "name": "Salt & <Steel> \"Co\"",
+     "summary": "It's a test of 'quotes', <tags> & ampersands.",
+     "accent": "green",
+     "strategy": {
+      "entry": {
+       "blockType": "topLevel",
+       "name": "Odd",
+       "blockIdForInstance": "odd-top",
+       "parentNodeId": "root",
+       "children": {
+        "blockType": "weight",
+        "weightType": "equal",
+        "weightings": [
+         "0",
+         "0",
+         "0",
+         "0"
+        ],
+        "blockIdForInstance": "odd-weights",
+        "parentNodeId": "odd-top",
+        "children": [
+         {
+          "blockType": "asset",
+          "assetId": "0x000000000000000000000000000000000000000b:56",
+          "blockIdForInstance": "odd-0",
+          "parentNodeId": "odd-weights"
+         },
+         {
+          "blockType": "asset",
+          "assetId": "0x000000000000000000000000000000000000000c:56",
+          "blockIdForInstance": "odd-1",
+          "parentNodeId": "odd-weights"
+         },
+         {
+          "blockType": "asset",
+          "assetId": "0x000000000000000000000000000000000000000d:56",
+          "blockIdForInstance": "odd-2",
+          "parentNodeId": "odd-weights"
+         },
+         {
+          "blockType": "asset",
+          "assetId": "0x000000000000000000000000000000000000000e:56",
+          "blockIdForInstance": "odd-3",
+          "parentNodeId": "odd-weights"
+         }
+        ]
+       }
+      },
+      "version": "1.0.0",
+      "tradingSettings": {
+       "type": "calendar",
+       "frequency": "weekly"
+      }
+     },
+     "holdings": [
+      {
+       "asset_id": "0x000000000000000000000000000000000000000b:56",
+       "symbol": "GLDon",
+       "name": "Gold & Sons (Tokenized)",
+       "weight": 0.99875
+      },
+      {
+       "asset_id": "0x000000000000000000000000000000000000000c:56",
+       "symbol": "Éon",
+       "name": "École <Nord>",
+       "weight": 0.00125
+      },
+      {
+       "asset_id": "0x000000000000000000000000000000000000000d:56",
+       "symbol": null,
+       "name": null,
+       "weight": 4e-05
+      },
+      {
+       "asset_id": "0x000000000000000000000000000000000000000e:56",
+       "symbol": "ZERO",
+       "name": "Nothing Yet",
+       "weight": 0
+      }
+     ]
+    }
+   }
+  }
+ },
+ {
+  "name": "starter-missing",
+  "address": "/s/gone",
+  "resources": {
+   "/v1/starters/gone": null
+  }
+ },
+ {
+  "name": "not-found",
+  "address": "/nowhere/at/all",
+  "resources": {}
+ },
+ {
+  "name": "broke",
+  "address": "/s/six-makers",
+  "resources": {},
+  "broke": true
+ },
+ {
+  "name": "broke-home",
+  "address": "/",
+  "resources": {},
+  "broke": true
+ }
+]

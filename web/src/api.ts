@@ -1,3 +1,8 @@
+// What the server knows, kept once in the browser. A page arrives with the
+// answers its first screen needs already inside it, so nothing is fetched twice.
+
+import { useEffect, useSyncExternalStore } from 'react';
+
 export type Holding = {
   asset_id: string;
   symbol: string | null;
@@ -5,66 +10,113 @@ export type Holding = {
   weight: number;
 };
 
-export type Accent = 'amber' | 'blue' | 'green';
+/** The five identity colours a fund can carry, in their fixed order. */
+export const FUND_COLOURS = ['blue', 'orange', 'teal', 'violet', 'magenta'] as const;
+export type FundColour = (typeof FUND_COLOURS)[number];
 
 export type Starter = {
   id: string;
   name: string;
   summary: string;
-  accent: Accent;
+  accent: string;
   /** The full strategy document. Only the trading settings are read here; the engine reads the rest. */
   strategy: { tradingSettings: { type: 'threshold'; triggerPercentage: number } | { type: 'calendar'; frequency: string } };
   holdings: Holding[];
 };
 
-/** A failed request, with a message fit to show a person. */
-export class ApiError extends Error {}
+/** One thing asked of the server: on its way, here, not there at all, or failed. */
+export type Loaded<T> = { state: 'loading' } | { state: 'ready'; data: T } | { state: 'missing' } | { state: 'failed' };
 
-export async function fetchStarters(signal?: AbortSignal): Promise<Starter[]> {
-  let response: Response;
+export const STARTERS = '/v1/starters';
+export const starterPath = (id: string) => `${STARTERS}/${id}`;
+
+const LOADING: Loaded<unknown> = { state: 'loading' };
+const entries = new Map<string, Loaded<unknown>>();
+const inFlight = new Set<string>();
+const listeners = new Set<() => void>();
+
+function put(path: string, entry: Loaded<unknown>) {
+  entries.set(path, entry);
+  // The list carries every starter in full, so opening one from the list needs no second request.
+  if (path === STARTERS && entry.state === 'ready') {
+    for (const starter of (entry.data as { starters: Starter[] }).starters) entries.set(starterPath(starter.id), { state: 'ready', data: { starter } });
+  }
+  listeners.forEach((listener) => listener());
+}
+
+/** Whether a body has the shape its path promises. A wrong shape is a failure, never a crash later. */
+function understood(path: string, body: unknown): boolean {
+  if (typeof body !== 'object' || body === null) return false;
+  if (path === STARTERS) return Array.isArray((body as { starters?: unknown }).starters);
+  const { starter } = body as { starter?: unknown };
+  return typeof starter === 'object' && starter !== null;
+}
+
+/** Take the answers the server put in the page. `null` means the server said there is no such thing. */
+export function seed(resources: Record<string, unknown>) {
+  for (const [path, body] of Object.entries(resources)) {
+    if (body === null) put(path, { state: 'missing' });
+    else if (understood(path, body)) put(path, { state: 'ready', data: body });
+  }
+}
+
+export function peek(path: string): Loaded<unknown> {
+  return entries.get(path) ?? LOADING;
+}
+
+/** Ask the server, unless the answer is here or on its way. `again` asks even after a failure or an answer. */
+export async function load(path: string, again = false, fetcher: typeof fetch = fetch): Promise<void> {
+  if (inFlight.has(path) || (entries.has(path) && !again)) return;
+  inFlight.add(path);
+  // What is on screen stays there while a good answer is asked for again, and stays if the asking fails.
+  const before = peek(path);
+  if (before.state !== 'ready') put(path, LOADING);
+  let entry: Loaded<unknown> = before.state === 'ready' ? before : { state: 'failed' };
   try {
-    response = await fetch('/v1/starters', { headers: { Accept: 'application/json' }, signal });
-  } catch (cause) {
-    if (signal?.aborted) throw cause;
-    throw new ApiError('Could not reach the Compounder backend. Check that it is running.');
+    const response = await fetcher(path, { headers: { Accept: 'application/json' } });
+    const body: unknown = await response.json().catch(() => null);
+    if (response.status === 404) entry = { state: 'missing' };
+    else if (response.ok && understood(path, body)) entry = { state: 'ready', data: body };
+  } catch {
+    // The network failed. The entry stays as it was set above, and the screen offers another try.
   }
-  const body: unknown = await response.json().catch(() => null);
-  if (!response.ok) {
-    const message = (body as { error?: { message?: string } } | null)?.error?.message;
-    throw new ApiError(message ?? `The backend answered with status ${response.status}.`);
-  }
-  const starters = (body as { starters?: Starter[] } | null)?.starters;
-  if (!Array.isArray(starters)) throw new ApiError('The backend sent an answer this app does not understand.');
-  return starters;
+  inFlight.delete(path);
+  put(path, entry);
 }
 
-/** 0.142857 becomes "14.29%", 0.4 becomes "40%". */
-export function percent(weight: number): string {
-  return `${(weight * 100).toLocaleString('en-US', { maximumFractionDigits: 2 })}%`;
+/** Ask again for everything that failed, for when the network comes back. */
+export function retryFailed() {
+  for (const [path, entry] of entries) if (entry.state === 'failed') void load(path, true);
 }
 
-/** The ticker a person recognises: "NVDAon" becomes "NVDA". */
-export function ticker(holding: Holding): string {
-  return (holding.symbol ?? holding.asset_id.slice(0, 6)).replace(/on$/, '');
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => void listeners.delete(listener);
 }
 
-/** The company or fund name, without the issuer's suffix. */
-export function displayName(holding: Holding): string {
-  return (holding.name ?? holding.symbol ?? holding.asset_id).replace(/\s*\([^)]*\)\s*$/, '');
+/** One answer from the server and a way to ask again. */
+function useResource(path: string): [Loaded<unknown>, () => void] {
+  const entry = useSyncExternalStore(
+    subscribe,
+    () => peek(path),
+    () => peek(path),
+  );
+  useEffect(() => void load(path), [path]);
+  return [entry, () => void load(path, true)];
 }
 
-/** A stable hue per ticker, so a token keeps its colour everywhere. */
-export function hue(label: string): number {
-  let hash = 0;
-  for (const char of label) hash = (hash * 31 + char.charCodeAt(0)) % 360;
-  return hash;
+export function useStarters(): [Loaded<Starter[]>, () => void] {
+  const [entry, again] = useResource(STARTERS);
+  return [entry.state === 'ready' ? { state: 'ready', data: (entry.data as { starters: Starter[] }).starters } : entry, again];
 }
 
-/** The chain every holding sits on, or null when they differ. */
-export function chainName(holdings: Holding[]): string | null {
-  const chains = new Set(holdings.map((holding) => holding.asset_id.split(':')[1]));
-  if (chains.size !== 1) return null;
-  const names: Record<string, string> = { '1': 'Ethereum', '56': 'BNB Chain', '8453': 'Base', '42161': 'Arbitrum' };
-  const [chain] = chains;
-  return names[chain] ?? `chain ${chain}`;
+export function useStarter(id: string): [Loaded<Starter>, () => void] {
+  const [entry, again] = useResource(starterPath(id));
+  return [entry.state === 'ready' ? { state: 'ready', data: (entry.data as { starter: Starter }).starter } : entry, again];
+}
+
+/** Forget everything. For tests. */
+export function reset() {
+  entries.clear();
+  inFlight.clear();
 }
