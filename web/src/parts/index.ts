@@ -9,3 +9,6 @@ export { Skeleton, CardSkeleton, RowSkeleton } from './Skeleton.tsx';
 export { EmptyState, Banner, type BannerVariant } from './Notice.tsx';
 export { TopBar, BottomBar, type NavItem } from './Bars.tsx';
 export { Sheet } from './Sheet.tsx';
+export { Segmented } from './Segmented.tsx';
+export { StatBand } from './StatBand.tsx';
+export { LineChart, type ChartLine } from './LineChart.tsx';

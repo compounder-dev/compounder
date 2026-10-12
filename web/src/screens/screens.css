@@ -37,6 +37,26 @@
   letter-spacing: var(--type-small-tracking);
 }
 
+/* What a test came to, under a line of its own: three figures side by side. */
+.card-figures {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: var(--size-hairline) solid var(--stroke-hairline);
+}
+
+.card-figures dt {
+  color: var(--text-faint);
+  font: var(--type-caption);
+  letter-spacing: var(--type-caption-tracking);
+}
+
+.card-figures dd {
+  margin-top: var(--space-1);
+}
+
 .region-notice {
   max-width: var(--size-reading-max);
   margin-top: var(--section-gap);
@@ -93,6 +113,48 @@
   color: var(--text-muted);
   font: var(--type-small);
   letter-spacing: var(--type-small-tracking);
+}
+
+.starter-results {
+  display: grid;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+/* The period control keeps its own width. The chart and what is under it take the whole of theirs. */
+.test-chart {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.test-chart > :not(.segmented) {
+  justify-self: stretch;
+}
+
+.chart-table summary {
+  padding: var(--space-3) 0;
+  color: var(--text-muted);
+  font: var(--type-small);
+  letter-spacing: var(--type-small-tracking);
+  cursor: pointer;
+}
+
+.table-note,
+.honest-line {
+  color: var(--text-muted);
+  font: var(--type-small);
+  letter-spacing: var(--type-small-tracking);
+  text-wrap: pretty;
+}
+
+.table-note {
+  margin-top: var(--space-3);
+}
+
+.honest-line {
+  max-width: var(--size-reading-max);
 }
 
 .starter-holdings .rows {
@@ -196,6 +258,7 @@
     grid-template-columns: minmax(0, 1fr) minmax(0, calc(var(--size-sheet-max) - var(--space-16)));
     grid-template-areas:
       'head facts'
+      'results facts'
       'holdings facts';
     column-gap: var(--space-12);
     align-items: start;
@@ -209,6 +272,10 @@
     grid-area: facts;
     position: sticky;
     top: var(--space-6);
+  }
+
+  .starter-results {
+    grid-area: results;
   }
 
   .starter-holdings {

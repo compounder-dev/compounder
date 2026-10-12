@@ -1,8 +1,34 @@
-import { useStarters, type Starter } from '../api.ts';
+import { useStarters, type Starter, type TestFigures } from '../api.ts';
 import { useEvent } from '../events.ts';
-import { Banner, Button, Card, CardSkeleton, CardTitle, EmptyState } from '../parts/index.ts';
+import { Banner, Button, Card, CardSkeleton, CardTitle, EmptyState, Number } from '../parts/index.ts';
 import { starterAddress, useTitle } from '../route.ts';
-import { fundColour, holdsLine } from '../starter.ts';
+import { asFall, changeTone, fundColour, holdsLine, yearOf } from '../starter.ts';
+
+/** The three figures of a test that a card can carry. Each says what it is, and the first says it was tested. */
+function Figures({ test }: { test: TestFigures }) {
+  return (
+    <dl className="card-figures">
+      <div>
+        <dt>Per year, tested</dt>
+        <dd>
+          <Number kind="percent" value={test.per_year} tone={changeTone(test.per_year)} sign />
+        </dd>
+      </div>
+      <div>
+        <dt>Worst drop</dt>
+        <dd>
+          <Number kind="percent" value={asFall(test.worst_drop)} />
+        </dd>
+      </div>
+      <div>
+        <dt>Tested since</dt>
+        <dd>
+          <span className="number">{yearOf(test.first_day)}</span>
+        </dd>
+      </div>
+    </dl>
+  );
+}
 
 function StarterCard({ starter }: { starter: Starter }) {
   return (
@@ -17,6 +43,7 @@ function StarterCard({ starter }: { starter: Starter }) {
           <dd>{holdsLine(starter.holdings)}</dd>
         </div>
       </dl>
+      {starter.test && <Figures test={starter.test} />}
     </Card>
   );
 }

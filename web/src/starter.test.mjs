@@ -65,3 +65,17 @@ test('the browser check passes only on the same assets with the same shares', ()
   assert.equal(sameAllocation({ a: 700_000_000, b: 300_000_000, c: 0 }, holdings), false);
   assert.equal(sameAllocation({ a: 700_000_000, c: 300_000_000 }, holdings), false);
 });
+
+test('a day is written as its month and year, and anything else as it stands', async () => {
+  const { monthYear, yearOf } = await import('./starter.ts');
+  assert.equal(monthYear('2012-05-18'), 'May 2012');
+  assert.equal(monthYear('2026-12-01'), 'Dec 2026');
+  for (const odd of ['2012-13-18', '2012-00-18', '12-05-18', '2012-5-18', 'soon', '']) assert.equal(monthYear(odd), odd);
+  assert.equal(yearOf('2012-05-18'), '2012');
+});
+
+test('a change that prints as zero has no colour', async () => {
+  const { changeTone, asFall } = await import('./starter.ts');
+  assert.deepEqual([0.361, -0.02, 0.00001, -0.00001, null].map(changeTone), ['gain', 'loss', 'plain', 'plain', 'plain']);
+  assert.deepEqual([asFall(0.5), asFall(null), Object.is(asFall(0), 0)], [-0.5, null, true]);
+});

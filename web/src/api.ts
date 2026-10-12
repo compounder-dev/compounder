@@ -14,6 +14,21 @@ export type Holding = {
 export const FUND_COLOURS = ['blue', 'orange', 'teal', 'violet', 'magenta'] as const;
 export type FundColour = (typeof FUND_COLOURS)[number];
 
+/** What a test of a strategy over past prices came to. A figure the test could not work out is null. */
+export type TestFigures = {
+  first_day: string;
+  last_day: string;
+  /** The yearly gain over the tested days, as a fraction. */
+  per_year: number | null;
+  /** The largest fall from a high to a later low, as a fraction of the high. */
+  worst_drop: number | null;
+  sharpe: number | null;
+  /** The benchmark's yearly gain over the same days. */
+  benchmark_per_year: number | null;
+  /** The share of each trade that the test took as its cost. */
+  cost: number;
+};
+
 export type Starter = {
   id: string;
   name: string;
@@ -21,14 +36,24 @@ export type Starter = {
   accent: string;
   /** The full strategy document. Only the trading settings are read here; the engine reads the rest. */
   strategy: { tradingSettings: { type: 'threshold'; triggerPercentage: number } | { type: 'calendar'; frequency: string } };
+  /** Absent where the server has no prices to test the strategy on. */
+  test?: TestFigures;
   holdings: Holding[];
 };
 
 /** One thing asked of the server: on its way, here, not there at all, or failed. */
 export type Loaded<T> = { state: 'loading' } | { state: 'ready'; data: T } | { state: 'missing' } | { state: 'failed' };
 
+/** A whole test, day by day: what the fund would have been worth, and its benchmark beside it. */
+export type TestSeries = {
+  days: string[];
+  values: number[];
+  benchmark: { symbol: string; values: (number | null)[] } | null;
+};
+
 export const STARTERS = '/v1/starters';
 export const starterPath = (id: string) => `${STARTERS}/${id}`;
+export const starterTestPath = (id: string) => `${STARTERS}/${id}/test`;
 
 const LOADING: Loaded<unknown> = { state: 'loading' };
 const entries = new Map<string, Loaded<unknown>>();
@@ -48,6 +73,10 @@ function put(path: string, entry: Loaded<unknown>) {
 function understood(path: string, body: unknown): boolean {
   if (typeof body !== 'object' || body === null) return false;
   if (path === STARTERS) return Array.isArray((body as { starters?: unknown }).starters);
+  if (/^\/v1\/starters\/[^/]+\/test$/.test(path)) {
+    const { days, values } = body as { days?: unknown; values?: unknown };
+    return Array.isArray(days) && Array.isArray(values) && days.length === values.length && days.length > 0;
+  }
   const { starter } = body as { starter?: unknown };
   return typeof starter === 'object' && starter !== null;
 }
@@ -113,6 +142,11 @@ export function useStarters(): [Loaded<Starter[]>, () => void] {
 export function useStarter(id: string): [Loaded<Starter>, () => void] {
   const [entry, again] = useResource(starterPath(id));
   return [entry.state === 'ready' ? { state: 'ready', data: (entry.data as { starter: Starter }).starter } : entry, again];
+}
+
+export function useStarterTest(id: string): [Loaded<TestSeries>, () => void] {
+  const [entry, again] = useResource(starterTestPath(id));
+  return [entry as Loaded<TestSeries>, again];
 }
 
 /** Forget everything. For tests. */

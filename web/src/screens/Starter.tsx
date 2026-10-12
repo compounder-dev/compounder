@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
-import { useStarter, type Starter } from '../api.ts';
+import { useStarter, type Starter, type TestFigures } from '../api.ts';
 import { useEvent } from '../events.ts';
-import { Banner, Button, Card, Icon, Link, Mark, Number, Row, RowSkeleton, Skeleton, WeightBar, type IconName } from '../parts/index.ts';
+import { Banner, Button, Card, Icon, Link, Mark, Number, Row, RowSkeleton, Skeleton, StatBand, WeightBar, type IconName } from '../parts/index.ts';
 import { useTitle } from '../route.ts';
-import { barShare, displayName, fundColour, markLetter, sameAllocation, tradesLine } from '../starter.ts';
+import { asFall, barShare, changeTone, displayName, fundColour, markLetter, sameAllocation, testedLine, ticker, tradesLine } from '../starter.ts';
 import { NotFound } from './System.tsx';
+import { TestChart } from './TestChart.tsx';
 
 type Check = 'idle' | 'checking' | 'match' | 'mismatch' | 'unavailable';
 
@@ -58,6 +59,27 @@ function CheckLine({ starter }: { starter: Starter }) {
   );
 }
 
+/** What the fund's test over past prices came to: the chart, four figures, and the line that says what they are. */
+function Results({ id, test }: { id: string; test: TestFigures }) {
+  return (
+    <section className="starter-results" aria-labelledby="results-title">
+      <h2 className="section-title" id="results-title">
+        How it would have done
+      </h2>
+      <StatBand
+        items={[
+          { label: 'Per year', value: <Number kind="percent" value={test.per_year} size="title2" tone={changeTone(test.per_year)} sign /> },
+          { label: 'Worst drop', value: <Number kind="percent" value={asFall(test.worst_drop)} size="title2" /> },
+          { label: 'Sharpe ratio', value: <Number kind="ratio" value={test.sharpe} size="title2" /> },
+          { label: 'S&P 500, per year', value: <Number kind="percent" value={test.benchmark_per_year} size="title2" sign /> },
+        ]}
+      />
+      <TestChart id={id} />
+      <p className="honest-line">{testedLine(test)}</p>
+    </section>
+  );
+}
+
 function Ready({ starter }: { starter: Starter }) {
   const largest = Math.max(0, ...starter.holdings.map((holding) => holding.weight));
   return (
@@ -69,6 +91,29 @@ function Ready({ starter }: { starter: Starter }) {
         </h1>
         <p className="page-lead">{starter.summary}</p>
       </header>
+      {starter.test && <Results id={starter.id} test={starter.test} />}
+      <section className="starter-holdings" aria-labelledby="holdings-title">
+        <h2 className="section-title" id="holdings-title">
+          What it holds
+        </h2>
+        <ul className="rows" role="list">
+          {starter.holdings.map((holding) => (
+            <Row
+              key={holding.asset_id}
+              leading={<Mark letter={markLetter(holding)} />}
+              title={displayName(holding)}
+              detail={holding.symbol === null ? undefined : ticker(holding)}
+              trailing={
+                <>
+                  <WeightBar percent={barShare(holding.weight, largest)} />
+                  <Number kind="percent" value={holding.weight} />
+                </>
+              }
+            />
+          ))}
+        </ul>
+        <CheckLine starter={starter} />
+      </section>
       <Card as="aside" className="starter-facts" label="Facts">
         <dl className="facts">
           <div>
@@ -84,28 +129,6 @@ function Ready({ starter }: { starter: Starter }) {
         </dl>
         <p className="starter-note">Adding money is not open yet.</p>
       </Card>
-      <section className="starter-holdings" aria-labelledby="holdings-title">
-        <h2 className="section-title" id="holdings-title">
-          What it holds
-        </h2>
-        <ul className="rows" role="list">
-          {starter.holdings.map((holding) => (
-            <Row
-              key={holding.asset_id}
-              leading={<Mark letter={markLetter(holding)} />}
-              title={displayName(holding)}
-              detail={holding.symbol ?? undefined}
-              trailing={
-                <>
-                  <WeightBar percent={barShare(holding.weight, largest)} />
-                  <Number kind="percent" value={holding.weight} />
-                </>
-              }
-            />
-          ))}
-        </ul>
-        <CheckLine starter={starter} />
-      </section>
     </div>
   );
 }
@@ -126,6 +149,16 @@ function Loading() {
           <Skeleton width="half" />
         </p>
       </header>
+      <section className="starter-holdings">
+        <h2 className="section-title">
+          <Skeleton width="short" />
+        </h2>
+        <ul className="rows" role="list">
+          {[0, 1, 2, 3, 4].map((n) => (
+            <RowSkeleton key={n} />
+          ))}
+        </ul>
+      </section>
       <Card as="aside" className="starter-facts">
         <div className="facts">
           {[0, 1].map((n) => (
@@ -139,16 +172,6 @@ function Loading() {
           <Skeleton width="long" />
         </p>
       </Card>
-      <section className="starter-holdings">
-        <h2 className="section-title">
-          <Skeleton width="short" />
-        </h2>
-        <ul className="rows" role="list">
-          {[0, 1, 2, 3, 4].map((n) => (
-            <RowSkeleton key={n} />
-          ))}
-        </ul>
-      </section>
     </div>
   );
 }

@@ -8,10 +8,10 @@
  {"kind": "percent", "value": 0.127, "sign": true, "text": "+12.7%"},
  {"kind": "percent", "value": 15.97, "sign": true, "text": "+1,597%"},
  {"kind": "percent", "value": 0.142857142857, "text": "14.3%"},
- {"kind": "percent", "value": 0.4, "text": "40.0%"},
- {"kind": "percent", "value": 1, "text": "100.0%"},
- {"kind": "percent", "value": 0.075, "text": "7.50%"},
- {"kind": "percent", "value": 0.09996, "text": "10.0%"},
+ {"kind": "percent", "value": 0.4, "text": "40%"},
+ {"kind": "percent", "value": 1, "text": "100%"},
+ {"kind": "percent", "value": 0.075, "text": "7.5%"},
+ {"kind": "percent", "value": 0.09996, "text": "10%"},
  {"kind": "percent", "value": 0.09994, "text": "9.99%"},
  {"kind": "percent", "value": 9.9996, "text": "1,000%"},
  {"kind": "percent", "value": 0.00125, "text": "0.13%"},
@@ -51,5 +51,11 @@
  {"kind": "countdown", "value": 728, "text": "12m 08s"},
  {"kind": "countdown", "value": 3600, "text": "1h 00m"},
  {"kind": "countdown", "value": 59, "text": "0m 59s"},
- {"kind": "countdown", "value": -5, "text": "0m 00s"}
+ {"kind": "countdown", "value": -5, "text": "0m 00s"},
+ {"kind": "percent", "value": 0.361, "sign": true, "text": "+36.1%"},
+ {"kind": "percent", "value": -0.503, "text": "\u221250.3%"},
+ {"kind": "percent", "value": 0.0015, "text": "0.15%"},
+ {"kind": "percent", "value": 0.5, "text": "50%"},
+ {"kind": "percent", "value": 10, "text": "1,000%"},
+ {"kind": "percent", "value": 0.10004, "sign": true, "text": "+10%"}
 ]

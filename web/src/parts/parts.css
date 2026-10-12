@@ -885,3 +885,237 @@
     animation-name: fade;
   }
 }
+
+/* ---- StatBand ---- */
+
+.stat-band {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4) var(--space-6);
+}
+
+.stat-band dt {
+  color: var(--text-faint);
+  font: var(--type-small);
+  letter-spacing: var(--type-small-tracking);
+}
+
+.stat-band dd {
+  margin-top: var(--space-1);
+}
+
+@media (min-width: 640px) {
+  .stat-band {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* ---- Segmented ---- */
+
+.segmented {
+  display: inline-flex;
+  gap: var(--space-1);
+  min-width: 0;
+  margin: 0;
+  padding: var(--space-1);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--ground-raised);
+}
+
+.segment {
+  position: relative;
+  display: block;
+}
+
+/* The radio button is there for the keyboard and the reader. The words over it are what is seen. */
+.segment input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.segment span {
+  display: grid;
+  place-items: center;
+  min-width: var(--size-target);
+  height: calc(var(--size-target) - var(--space-2));
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-full);
+  color: var(--text-muted);
+  font: var(--type-small);
+  letter-spacing: var(--type-small-tracking);
+  transition:
+    background var(--duration-state) var(--easing-standard),
+    color var(--duration-state) var(--easing-standard);
+}
+
+.segment input:checked + span {
+  background: var(--ground-hover);
+  color: var(--text-primary);
+}
+
+.segment input:focus-visible + span {
+  outline: var(--size-focus-width) solid var(--focus-ring);
+  outline-offset: var(--size-focus-gap);
+}
+
+@media (hover: hover) {
+  .segment input:not(:checked):hover + span {
+    color: var(--text-primary);
+  }
+}
+
+/* ---- LineChart ---- */
+
+.line-chart {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+/* The day has a line to itself, so the figures under it do not move as it changes. */
+.chart-readout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-4);
+  color: var(--text-muted);
+  font: var(--type-small);
+  letter-spacing: var(--type-small-tracking);
+}
+
+.chart-day {
+  flex: 1 1 100%;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-figure {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.chart-figure .number {
+  color: var(--text-primary);
+}
+
+/* A short piece of the line beside its name, so the words need no colour. */
+.chart-key {
+  width: var(--space-4);
+  height: var(--chart-line-width);
+  border-radius: var(--radius-full);
+  background: var(--text-faint);
+}
+
+.chart-key-subject {
+  background: var(--fund, var(--text-primary));
+}
+
+.chart-plot {
+  height: var(--chart-height-phone);
+  border-radius: var(--radius-control);
+  cursor: crosshair;
+  /* A finger moving across reads the chart. One moving up or down still scrolls the page. */
+  touch-action: pan-y;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.chart-drawing {
+  display: block;
+  overflow: visible;
+}
+
+.chart-grid {
+  stroke: var(--stroke-hairline);
+  stroke-width: var(--size-hairline);
+}
+
+.chart-label {
+  fill: var(--text-faint);
+  font: var(--type-caption);
+  letter-spacing: var(--type-caption-tracking);
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-line {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.chart-line-subject {
+  stroke: var(--fund, var(--text-primary));
+  stroke-width: var(--chart-line-width);
+}
+
+.chart-line-comparison {
+  stroke: var(--text-faint);
+  stroke-width: calc(var(--chart-line-width) * 0.75);
+}
+
+.chart-crosshair {
+  stroke: var(--stroke-control);
+  stroke-width: var(--size-hairline);
+}
+
+.chart-dot {
+  r: var(--space-1);
+  stroke: var(--ground-page);
+  stroke-width: var(--chart-line-width);
+}
+
+.chart-dot-subject {
+  fill: var(--fund, var(--text-primary));
+}
+
+.chart-dot-comparison {
+  fill: var(--text-muted);
+}
+
+/* A chart that has not arrived takes the room of the one that will. */
+.skeleton-chart {
+  display: block;
+  height: calc(var(--chart-height-phone) + var(--size-target) * 3);
+  border-radius: var(--radius-control);
+}
+
+@media (min-width: 1024px) {
+  .chart-plot {
+    height: var(--chart-height-desktop);
+  }
+
+  .skeleton-chart {
+    height: calc(var(--chart-height-desktop) + var(--size-target) * 3);
+  }
+}
+
+/* ---- Table ---- */
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font: var(--type-small);
+  letter-spacing: var(--type-small-tracking);
+  font-variant-numeric: tabular-nums;
+}
+
+.table th,
+.table td {
+  padding: var(--space-2) 0 var(--space-2) var(--space-4);
+  border-bottom: var(--size-hairline) solid var(--stroke-hairline);
+  font-weight: inherit;
+  text-align: right;
+}
+
+.table th:first-child {
+  padding-left: 0;
+  text-align: left;
+}
+
+.table thead th {
+  color: var(--text-faint);
+}

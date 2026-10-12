@@ -29,7 +29,8 @@ function signed(text: string, value: number, isZero: boolean, always: boolean): 
 
 /**
  * A share or a change, given as a fraction: 0.0034 becomes "0.34%".
- * Two decimals under 10, one from 10, none from 1,000. Zero is "0%", never negative.
+ * Up to two decimals under 10, one from 10, none from 1,000, and no zeros after the
+ * last digit that counts: "40%", "7.5%", "14.3%". Zero is "0%", never negative.
  * `sign` puts a plus on a rise, for a change.
  */
 export function formatPercent(fraction: number, options: { sign?: boolean } = {}): Formatted {
@@ -46,7 +47,8 @@ export function formatPercent(fraction: number, options: { sign?: boolean } = {}
     }
   }
   if (units === 0) return '0%';
-  return signed(`${written(units, decimals)}%`, fraction, false, options.sign ?? false);
+  const text = decimals ? written(units, decimals).replace(/\.?0+$/, '') : written(units, 0);
+  return signed(`${text}%`, fraction, false, options.sign ?? false);
 }
 
 const LARGE: [number, string][] = [

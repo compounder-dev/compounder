@@ -9,7 +9,7 @@
 use compounder_engine::strategy::TradingSettings;
 use serde_json::{json, Value};
 
-use crate::{Holding, StarterView};
+use crate::{tested::Figures, Holding, StarterView};
 
 /// The screen an address belongs to. `matchRoute` in `web/src/route.ts` follows the same rules.
 #[derive(Debug, PartialEq)]
@@ -101,7 +101,8 @@ fn signed(text: String, value: f64, always: bool) -> String {
     }
 }
 
-/// A share or a change, given as a fraction: two decimals under 10, one from 10, none from 1,000.
+/// A share or a change, given as a fraction: up to two decimals under 10, one from 10, none
+/// from 1,000, and no zeros after the last digit that counts.
 pub fn percent(fraction: f64, sign: bool) -> String {
     let amount = fraction.abs() * 100.0;
     let (mut units, mut decimals) = (scaled(amount, 2), 2);
@@ -114,7 +115,20 @@ pub fn percent(fraction: f64, sign: bool) -> String {
     if units == 0 {
         return "0%".to_string();
     }
-    signed(format!("{}%", written(units, decimals)), fraction, sign)
+    let text = written(units, decimals);
+    let text = if decimals > 0 { text.trim_end_matches('0').trim_end_matches('.') } else { &text };
+    signed(format!("{text}%"), fraction, sign)
+}
+
+/// A ratio with both decimals always shown: "1.50".
+pub fn ratio(ratio: f64) -> String {
+    let units = scaled(ratio.abs(), 2);
+    let text = written(units, 2);
+    if units == 0 {
+        text
+    } else {
+        signed(text, ratio, false)
+    }
 }
 
 /// A count or an amount: up to four decimals, and no zeros after the last digit that counts.
@@ -131,6 +145,96 @@ pub fn quantity(quantity: f64) -> String {
 
 fn number(text: &str) -> String {
     format!(r#"<span class="number">{text}</span>"#)
+}
+
+/// A number with the classes of its size and tone, each written with a space before it.
+/// One that is not known is a dash for the eye and words for a reader.
+fn number_in(classes: &str, text: Option<String>) -> String {
+    match text {
+        Some(text) => format!(r#"<span class="number{classes}">{text}</span>"#),
+        None => format!("<span class=\"number{classes}\"><span aria-hidden=\"true\">\u{2013}</span><span class=\"sr-only\">not available</span></span>"),
+    }
+}
+
+/// The class a change is coloured by. One that prints as zero has none.
+fn change_tone(change: Option<f64>) -> &'static str {
+    match change {
+        Some(change) if percent(change, false) != "0%" && change > 0.0 => " number-gain",
+        Some(change) if percent(change, false) != "0%" => " number-loss",
+        _ => "",
+    }
+}
+
+// ---- words drawn from a test: the rules of `web/src/starter.ts` ----
+
+const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/// A day written "2012-05-18" as "May 2012". Anything else is shown as it stands.
+fn month_year(day: &str) -> String {
+    let digits = |text: &str, length: usize| text.len() == length && text.chars().all(|c| c.is_ascii_digit());
+    let parts: Vec<&str> = day.split('-').collect();
+    let month = match parts[..] {
+        [year, month, date] if digits(year, 4) && digits(month, 2) && digits(date, 2) => month.parse::<usize>().ok().and_then(|month| MONTHS.get(month.wrapping_sub(1))),
+        _ => None,
+    };
+    match month {
+        Some(name) => format!("{name} {}", parts[0]),
+        None => day.to_string(),
+    }
+}
+
+/// The year of a day written "2012-05-18": its first four characters.
+fn year_of(day: &str) -> String {
+    day.chars().take(4).collect()
+}
+
+/// A fall, given as a share of the high it fell from, as the change it is.
+fn as_fall(drop: Option<f64>) -> Option<f64> {
+    drop.map(|drop| 0.0 - drop)
+}
+
+fn tested_line(test: &Figures) -> String {
+    format!(
+        "Tested on past prices from {} to {}, with a cost of {} taken from each trade. This fund is not live yet. Past results do not promise future results.",
+        month_year(&test.first_day),
+        month_year(&test.last_day),
+        percent(test.cost, false),
+    )
+}
+
+/// The three figures of a test that a card carries.
+fn card_figures(test: &Figures) -> String {
+    format!(
+        concat!(
+            r#"<dl class="card-figures"><div><dt>Per year, tested</dt><dd>{per_year}</dd></div>"#,
+            r#"<div><dt>Worst drop</dt><dd>{worst_drop}</dd></div>"#,
+            r#"<div><dt>Tested since</dt><dd>{since}</dd></div></dl>"#,
+        ),
+        per_year = number_in(change_tone(test.per_year), test.per_year.map(|change| percent(change, true))),
+        worst_drop = number_in("", as_fall(test.worst_drop).map(|fall| percent(fall, false))),
+        since = number(&escape(&year_of(&test.first_day))),
+    )
+}
+
+/// What a fund's test came to: the place its chart is drawn in, four figures, and the line that says what they are.
+fn results(test: &Figures) -> String {
+    let large = |tone: &str| format!(" number-title2{tone}");
+    format!(
+        concat!(
+            r#"<section class="starter-results" aria-labelledby="results-title"><h2 class="section-title" id="results-title">How it would have done</h2>"#,
+            r#"<dl class="stat-band"><div><dt>Per year</dt><dd>{per_year}</dd></div>"#,
+            r#"<div><dt>Worst drop</dt><dd>{worst_drop}</dd></div>"#,
+            r#"<div><dt>Sharpe ratio</dt><dd>{sharpe}</dd></div>"#,
+            r#"<div><dt>S&amp;P 500, per year</dt><dd>{benchmark}</dd></div></dl>"#,
+            r#"<div class="test-chart"><span class="skeleton skeleton-chart" aria-hidden="true"></span></div>"#,
+            r#"<p class="honest-line">{line}</p></section>"#,
+        ),
+        per_year = number_in(&large(change_tone(test.per_year)), test.per_year.map(|change| percent(change, true))),
+        worst_drop = number_in(&large(""), as_fall(test.worst_drop).map(|fall| percent(fall, false))),
+        sharpe = number_in(&large(""), test.sharpe.map(ratio)),
+        benchmark = number_in(&large(""), test.benchmark_per_year.map(|change| percent(change, true))),
+        line = escape(&tested_line(test)),
+    )
 }
 
 // ---- words drawn from a starter: the rules of `web/src/starter.ts` ----
@@ -203,13 +307,14 @@ fn home(starters: &[StarterView]) -> String {
                 r#"<li class="card card-strategy fund-{colour}">"#,
                 r#"<h2 class="card-title"><span class="fund-dot" aria-hidden="true"></span><a class="card-link" href="/s/{id}">{name}</a></h2>"#,
                 r#"<p class="card-summary">{summary}</p>"#,
-                r#"<dl class="card-facts"><div><dt>Holds</dt><dd>{holds}</dd></div></dl></li>"#,
+                r#"<dl class="card-facts"><div><dt>Holds</dt><dd>{holds}</dd></div></dl>{figures}</li>"#,
             ),
             colour = fund_colour(&starter.accent),
             id = escape(&starter.id),
             name = escape(&starter.name),
             summary = escape(&starter.summary),
             holds = escape(&holds_line(&starter.holdings)),
+            figures = starter.test.as_ref().map(card_figures).unwrap_or_default(),
         ));
     }
     out.push_str("</ul>");
@@ -223,20 +328,17 @@ fn starter(starter: &StarterView) -> String {
             r#"<p class="back-link"><a class="link link-standalone" href="/">{back}All funds</a></p>"#,
             r#"<div class="starter fund-{colour}">"#,
             r#"<header class="starter-head"><h1 class="page-title"><span class="fund-dot" aria-hidden="true"></span>{name}</h1><p class="page-lead">{summary}</p></header>"#,
-            r#"<aside class="card card-plain starter-facts" aria-label="Facts"><dl class="facts">"#,
-            r#"<div><dt>Holdings</dt><dd>{count}</dd></div><div><dt>Trades</dt><dd>{trades}</dd></div></dl>"#,
-            r#"<p class="starter-note">Adding money is not open yet.</p></aside>"#,
+            "{results}",
             r#"<section class="starter-holdings" aria-labelledby="holdings-title"><h2 class="section-title" id="holdings-title">What it holds</h2><ul class="rows" role="list">"#,
         ),
         back = icon(ICON_ARROW_LEFT),
         colour = fund_colour(&starter.accent),
         name = escape(&starter.name),
         summary = escape(&starter.summary),
-        count = number(&quantity(starter.holdings.len() as f64)),
-        trades = escape(&trades_line(&starter.strategy.trading_settings)),
+        results = starter.test.as_ref().map(results).unwrap_or_default(),
     );
     for holding in &starter.holdings {
-        let detail = holding.symbol.as_deref().map(|symbol| format!(r#"<span class="row-detail">{}</span>"#, escape(symbol))).unwrap_or_default();
+        let detail = holding.symbol.as_ref().map(|_| format!(r#"<span class="row-detail">{}</span>"#, escape(&ticker(holding)))).unwrap_or_default();
         out.push_str(&format!(
             concat!(
                 r#"<li class="row row-asset"><span class="mark" aria-hidden="true">{letter}</span>"#,
@@ -252,8 +354,15 @@ fn starter(starter: &StarterView) -> String {
     }
     // The line about the check in the browser holds its place and says nothing until a browser has run it.
     out.push_str(&format!(
-        r#"</ul><p class="check check-idle" role="status">{}Checking the allocation in your browser…</p></section></div>"#,
-        icon(ICON_CLOCK)
+        concat!(
+            r#"</ul><p class="check check-idle" role="status">{clock}Checking the allocation in your browser…</p></section>"#,
+            r#"<aside class="card card-plain starter-facts" aria-label="Facts"><dl class="facts">"#,
+            r#"<div><dt>Holdings</dt><dd>{count}</dd></div><div><dt>Trades</dt><dd>{trades}</dd></div></dl>"#,
+            r#"<p class="starter-note">Adding money is not open yet.</p></aside></div>"#,
+        ),
+        clock = icon(ICON_CLOCK),
+        count = number(&quantity(starter.holdings.len() as f64)),
+        trades = escape(&trades_line(&starter.strategy.trading_settings)),
     ));
     out
 }
@@ -424,7 +533,8 @@ mod tests {
             let printed = match case["kind"].as_str().unwrap() {
                 "percent" => percent(value, sign),
                 "quantity" => quantity(value),
-                // The server prints no money, ratios or countdowns yet.
+                "ratio" => ratio(value),
+                // The server prints no money or countdowns yet.
                 _ => continue,
             };
             assert_eq!(printed, case["text"].as_str().unwrap(), "{case}");
@@ -441,6 +551,25 @@ mod tests {
         assert_eq!(display_name(&named("Open (a) b)")), "Open (a) b)");
         assert_eq!(display_name(&named("(Only)")), "");
         assert_eq!(display_name(&named("Plain ")), "Plain ");
+    }
+
+    #[test]
+    fn a_day_is_written_as_its_month_and_year_and_anything_else_as_it_stands() {
+        assert_eq!(month_year("2012-05-18"), "May 2012");
+        assert_eq!(month_year("2026-12-01"), "Dec 2026");
+        for odd in ["2012-13-18", "2012-00-18", "12-05-18", "2012-5-18", "soon", ""] {
+            assert_eq!(month_year(odd), odd);
+        }
+        assert_eq!(year_of("2012-05-18"), "2012");
+    }
+
+    #[test]
+    fn a_change_that_prints_as_zero_has_no_colour() {
+        assert_eq!(change_tone(Some(0.361)), " number-gain");
+        assert_eq!(change_tone(Some(-0.02)), " number-loss");
+        assert_eq!(change_tone(Some(0.00001)), "");
+        assert_eq!(change_tone(Some(-0.00001)), "");
+        assert_eq!(change_tone(None), "");
     }
 
     #[test]
