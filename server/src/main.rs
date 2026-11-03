@@ -4,6 +4,7 @@
 
 mod page;
 
+mod auth;
 mod backtest;
 mod catalogue;
 mod live;
@@ -477,7 +478,7 @@ fn router(dist: PathBuf, prices: Option<Arc<Prices>>) -> Router {
         .route("/events", post(log_event).layer(DefaultBodyLimit::max(512)))
         .fallback(unknown_api_route)
         .with_state(shared);
-    Router::new()
+    let app = Router::new()
         .route("/health", get(health))
         .nest("/v1", api)
         // A missing asset is a 404, never a page under an asset's name.
@@ -485,7 +486,12 @@ fn router(dist: PathBuf, prices: Option<Arc<Prices>>) -> Router {
         .fallback_service(web)
         // Pages and answers are sent compressed to a browser that asks. An asset already is.
         .layer(CompressionLayer::new())
-        .layer(middleware::from_fn(cache_policy))
+        .layer(middleware::from_fn(cache_policy));
+    // Signing in is on where the server is told where to keep accounts.
+    match auth::Auth::from_env() {
+        Some(auth) => auth::routes(auth.clone()).merge(app).layer(middleware::from_fn_with_state(auth, auth::gate)),
+        None => app,
+    }
 }
 
 fn app(prices: Option<Arc<Prices>>) -> Router {
@@ -495,7 +501,9 @@ fn app(prices: Option<Arc<Prices>>) -> Router {
 #[tokio::main]
 async fn main() {
     let port = std::env::var("PORT").ok().and_then(|port| port.parse().ok()).unwrap_or(DEFAULT_PORT);
-    let address = SocketAddr::from(([127, 0, 0, 1], port));
+    // On a laptop the app answers only this machine. A host sets `HOST` to answer the world.
+    let host: std::net::IpAddr = std::env::var("HOST").ok().and_then(|host| host.parse().ok()).unwrap_or([127, 0, 0, 1].into());
+    let address = SocketAddr::new(host, port);
     let listener = tokio::net::TcpListener::bind(address)
         .await
         .unwrap_or_else(|e| panic!("cannot bind {address}: {e}"));

@@ -9,7 +9,11 @@ compounder-engine = { path = "../engine" }
 compounder-desk = { path = "../desk", default-features = false }
 # The price store and the calendar, without the feed that fills the store.
 compounder-prices = { path = "../prices", default-features = false }
-axum = "0.8"
+axum = { version = "0.8", features = ["form"] }
+# Passwords are kept only as slow, salted hashes.
+argon2 = "0.5"
+rand = "0.8"
+hex = "0.4"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "fs", "sync"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
