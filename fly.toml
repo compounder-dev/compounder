@@ -7,6 +7,8 @@ primary_region = "jnb"
   DESK_DIR = "/data/desk"
   AUTH_DIR = "/data/auth"
   PRICE_STORE = "/data/prices"
+  PLAY_DIR = "/data/play"
+  APP_DIST = "/app/play/dist"
 
 [[mounts]]
   source = "compounder_data"

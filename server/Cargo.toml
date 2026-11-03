@@ -14,7 +14,9 @@ axum = { version = "0.8", features = ["form"] }
 argon2 = "0.5"
 rand = "0.8"
 hex = "0.4"
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "fs", "sync"] }
+# Live prices for play trades, read from the venue.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "fs", "sync", "time"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tower-http = { version = "0.6", features = ["fs", "compression-br", "compression-gzip"] }

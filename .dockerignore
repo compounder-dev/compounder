@@ -6,3 +6,5 @@ contracts/out
 contracts/cache
 contracts/lib
 .git
+play/node_modules
+play/dist

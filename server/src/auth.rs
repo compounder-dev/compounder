@@ -28,6 +28,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 const COOKIE: &str = "session";
+
+/// Who a signed-in request is from: their email.
+#[derive(Clone, Debug)]
+pub struct User(pub String);
 const SESSION_SECONDS: u64 = 30 * 24 * 3600;
 
 #[derive(Default, Serialize, Deserialize)]
@@ -78,9 +82,10 @@ impl Auth {
         std::fs::rename(tmp, &self.file)
     }
 
-    fn signed_in(&self, token: &str) -> bool {
+    /// The email a live session belongs to.
+    fn signed_in(&self, token: &str) -> Option<String> {
         let store = self.store.lock().unwrap();
-        store.sessions.get(token).is_some_and(|session| session.expires > now())
+        store.sessions.get(token).filter(|session| session.expires > now()).map(|session| session.email.clone())
     }
 
     fn start(&self, store: &mut Store, email: &str) -> String {
@@ -108,19 +113,23 @@ fn session_cookie(token: &str, seconds: u64) -> HeaderValue {
 fn local(next: Option<&str>) -> String {
     match next {
         Some(path) if path.starts_with('/') && !path.starts_with("//") && !path.starts_with("/\\") => path.to_string(),
-        _ => "/live".to_string(),
+        _ => "/".to_string(),
     }
 }
 
 /// Every request but the sign-in pages, the health check and the files the
 /// build put beside the shell needs a session. A page sends you to sign in; the
 /// API answers 401.
-pub async fn gate(State(auth): State<Auth>, request: Request, next: Next) -> Response {
+pub async fn gate(State(auth): State<Auth>, mut request: Request, next: Next) -> Response {
+    if let Some(email) = token_of(&request).and_then(|token| auth.signed_in(&token)) {
+        request.extensions_mut().insert(User(email));
+        return next.run(request).await;
+    }
     let path = request.uri().path();
     let open = matches!(path, "/login" | "/signup" | "/logout" | "/health")
         || path.starts_with("/assets/")
         || path.rsplit('/').next().is_some_and(|last| last.contains('.'));
-    if open || token_of(&request).is_some_and(|token| auth.signed_in(&token)) {
+    if open {
         return next.run(request).await;
     }
     if path.starts_with("/v1/") {
@@ -265,7 +274,7 @@ async fn signup(State(auth): State<Auth>, Form(form): Form<SignUp>) -> Response 
     if auth.save(&store).is_err() {
         return (StatusCode::INTERNAL_SERVER_ERROR, "could not save the account").into_response();
     }
-    let mut response = Redirect::to("/live").into_response();
+    let mut response = Redirect::to("/").into_response();
     response.headers_mut().insert(header::SET_COOKIE, session_cookie(&token, SESSION_SECONDS));
     response
 }
@@ -336,7 +345,7 @@ mod tests {
         assert_eq!(wrong.status(), StatusCode::UNAUTHORIZED);
         let fresh = Auth::at(dir.clone(), None);
         let right = app(fresh.clone()).oneshot(form("/login", "email=a%40b.co&password=longenough&next=//evil.com", None)).await.unwrap();
-        assert_eq!(right.headers()[header::LOCATION], "/live");
+        assert_eq!(right.headers()[header::LOCATION], "/");
         let cookie = cookie_of(&right);
         let board =
             app(fresh).oneshot(HttpRequest::get("/live").header("cookie", cookie).body(Body::empty()).unwrap()).await.unwrap();

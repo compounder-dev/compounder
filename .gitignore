@@ -1,6 +1,7 @@
 # build output
 /target/
 /web/dist/
+/play/dist/
 /web/src/engine.wasm
 /contracts/out/
 /contracts/cache/

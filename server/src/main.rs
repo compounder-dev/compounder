@@ -8,6 +8,7 @@ mod auth;
 mod backtest;
 mod catalogue;
 mod live;
+mod play;
 mod outline;
 mod prices;
 mod tested;
@@ -39,7 +40,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::sync::Semaphore;
 use tested::{Figures, Tested};
-use tower_http::{compression::CompressionLayer, services::ServeDir};
+use tower_http::{
+    compression::CompressionLayer,
+    services::{ServeDir, ServeFile},
+};
 
 /// The port to listen on, unless `PORT` names another.
 const DEFAULT_PORT: u16 = 8787;
@@ -454,7 +458,11 @@ async fn page_for(shell_file: PathBuf, tested: Option<Arc<Tested>>, uri: Uri) ->
 
 /// The API and the web app built into `dist`, on one router. `prices` is the price store
 /// backtests run on, when there is one.
-fn router(dist: PathBuf, prices: Option<Arc<Prices>>) -> Router {
+fn router(dist: PathBuf, prices: Option<Arc<Prices>>, play: play::Play) -> Router {
+    // The trading app is a single page that draws itself from live prices. Where it is
+    // built, it is the site, and any address that is not a file is its page.
+    let app_dist = std::env::var_os("APP_DIST").map(PathBuf::from);
+    let dist = app_dist.clone().unwrap_or(dist);
     let shared = Shared::over(prices);
     let shell_file = dist.join("index.html");
     let tested = shared.tested.clone();
@@ -477,13 +485,18 @@ fn router(dist: PathBuf, prices: Option<Arc<Prices>>) -> Router {
         // An event is a few words. Anything larger is not one.
         .route("/events", post(log_event).layer(DefaultBodyLimit::max(512)))
         .fallback(unknown_api_route)
-        .with_state(shared);
+        .with_state(shared)
+        .merge(play::routes(play));
     let app = Router::new()
         .route("/health", get(health))
         .nest("/v1", api)
         // A missing asset is a 404, never a page under an asset's name.
-        .nest_service("/assets", assets)
-        .fallback_service(web)
+        .nest_service("/assets", assets);
+    let app = match app_dist {
+        Some(dist) => app.fallback_service(ServeDir::new(&dist).fallback(ServeFile::new(dist.join("index.html")))),
+        None => app.fallback_service(web),
+    };
+    let app = app
         // Pages and answers are sent compressed to a browser that asks. An asset already is.
         .layer(CompressionLayer::new())
         .layer(middleware::from_fn(cache_policy));
@@ -492,10 +505,6 @@ fn router(dist: PathBuf, prices: Option<Arc<Prices>>) -> Router {
         Some(auth) => auth::routes(auth.clone()).merge(app).layer(middleware::from_fn_with_state(auth, auth::gate)),
         None => app,
     }
-}
-
-fn app(prices: Option<Arc<Prices>>) -> Router {
-    router(web_dist(), prices)
 }
 
 #[tokio::main]
@@ -510,7 +519,10 @@ async fn main() {
     // Backtests need daily prices. Without a store the rest of the app still runs.
     let prices = std::env::var_os("PRICE_STORE").map(|dir| Arc::new(Prices::at(dir)));
     println!("backend on http://{address}, {}", if prices.is_some() { "with a price store" } else { "with no price store: set PRICE_STORE to run backtests" });
-    axum::serve(listener, app(prices)).await.expect("server stopped");
+    // Play trades are priced live, so the prices start with the server.
+    let play = play::Play::from_env();
+    play.start();
+    axum::serve(listener, router(web_dist(), prices, play)).await.expect("server stopped");
 }
 
 #[cfg(test)]
@@ -539,7 +551,7 @@ mod tests {
             if let Some(encoding) = accept_encoding {
                 request = request.header(header::ACCEPT_ENCODING, encoding);
             }
-            router(self.0.clone(), None).oneshot(request.body(Body::empty()).unwrap()).await.unwrap()
+            router(self.0.clone(), None, play::Play::from_env()).oneshot(request.body(Body::empty()).unwrap()).await.unwrap()
         }
     }
 
@@ -551,7 +563,7 @@ mod tests {
 
     /// The server with no web build at all: pages come in the bare shell.
     fn unbuilt(prices: Option<Arc<Prices>>) -> Router {
-        router(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("no-web-build-here"), prices)
+        router(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("no-web-build-here"), prices, play::Play::from_env())
     }
 
     async fn text_of(response: Response) -> String {
@@ -690,7 +702,7 @@ mod tests {
         let dist = || build.0.clone();
         let policy = |path: &'static str| async move {
             let request = Request::builder().uri(path).body(Body::empty()).unwrap();
-            let response = router(dist(), None).oneshot(request).await.unwrap();
+            let response = router(dist(), None, play::Play::from_env()).oneshot(request).await.unwrap();
             response.headers().get(CACHE_CONTROL).map(|value| value.to_str().unwrap().to_string())
         };
         assert_eq!(policy("/v1/strategies").await.as_deref(), Some("no-cache"));
