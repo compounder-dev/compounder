@@ -32,12 +32,18 @@ export function Modal({ onClose, children }: { onClose: () => void; children: Re
 const fill = (value: number, min: number, max: number) => ({ '--fill': `${max > min ? ((value - min) / (max - min)) * 100 : 0}%` }) as React.CSSProperties;
 
 const LEVERAGE = [1, 2, 5, 10, 20];
+/** The fee on a trade's size, as the server charges it. */
+const FEE = 0.0009;
+const cents = (n: number) => Math.max(0, Math.floor(n * 100) / 100);
 
 /** Pick a side, an amount and leverage, and place it. */
 export function TradeSheet({ market, symbol, available, maxLeverage, onClose, onPlaced }: { market: string; symbol: string; available: number; maxLeverage: number; onClose: () => void; onPlaced: (me: Me) => void }) {
   const [side, setSide] = useState<'up' | 'down' | null>(null);
-  const [amount, setAmount] = useState(Math.max(0, Math.floor(available / 2)));
+  const [wanted, setAmount] = useState(Math.max(0, Math.floor(available / 2)));
   const [multiplier, setMultiplier] = useState(1);
+  // The most you can put in leaves room for the fee on the trade's size.
+  const most = cents(available / (1 + multiplier * FEE));
+  const amount = Math.min(wanted, most);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const place = () => {
@@ -70,10 +76,10 @@ export function TradeSheet({ market, symbol, available, maxLeverage, onClose, on
         <div className="field-head">
           <label htmlFor="amount">Amount</label>
           <span className="field-value">
-            $<input id="amount" inputMode="decimal" value={amount} onChange={(e) => setAmount(Math.min(available, Number(e.target.value.replace(/[^0-9.]/g, '')) || 0))} />
+            $<input id="amount" inputMode="decimal" value={amount} onChange={(e) => setAmount(cents(Number(e.target.value.replace(/[^0-9.]/g, '')) || 0))} />
           </span>
         </div>
-        <input className="slider" type="range" min={0} max={Math.max(1, Math.floor(available))} step={1} value={amount} style={fill(amount, 0, Math.floor(available))} onChange={(e) => setAmount(Number(e.target.value))} aria-label="Amount" />
+        <input className="slider" type="range" min={0} max={Math.max(1, most)} step={0.01} value={amount} style={fill(amount, 0, most)} onChange={(e) => setAmount(Number(e.target.value))} aria-label="Amount" />
       </div>
       <div className="start-presets">
         {LEVERAGE.filter((x) => x <= maxLeverage).map((x) => (
@@ -156,7 +162,7 @@ export async function cashOut(id: string): Promise<{ me: Me; trade?: Trade }> {
 
 /** Copy a strategy with an amount, change it, or stop. */
 export function CopySheet({ fund, name, available, held, onClose, onDone }: { fund: string; name: string; available: number; held: number; onClose: () => void; onDone: (me: Me) => void }) {
-  const [amount, setAmount] = useState(Math.floor(available));
+  const [amount, setAmount] = useState(cents(available));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const go = (credits: number) => {
@@ -176,10 +182,10 @@ export function CopySheet({ fund, name, available, held, onClose, onDone }: { fu
         <div className="field-head">
           <label htmlFor="back-amount">Amount</label>
           <span className="field-value">
-            $<input id="back-amount" inputMode="decimal" value={amount} onChange={(e) => setAmount(Math.min(available, Number(e.target.value.replace(/[^0-9.]/g, '')) || 0))} />
+            $<input id="back-amount" inputMode="decimal" value={amount} onChange={(e) => setAmount(Math.min(cents(available), cents(Number(e.target.value.replace(/[^0-9.]/g, '')) || 0)))} />
           </span>
         </div>
-        <input className="slider" type="range" min={0} max={Math.max(1, Math.floor(available))} step={1} value={amount} style={fill(amount, 0, Math.floor(available))} onChange={(e) => setAmount(Number(e.target.value))} aria-label="Amount" />
+        <input className="slider" type="range" min={0} max={Math.max(1, cents(available))} step={0.01} value={amount} style={fill(amount, 0, cents(available))} onChange={(e) => setAmount(Number(e.target.value))} aria-label="Amount" />
       </div>
       <div className="summary">
         <span>
