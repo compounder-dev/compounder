@@ -13,6 +13,8 @@ pub mod fill;
 pub mod fund;
 pub mod ledger;
 pub mod market;
+#[cfg(feature = "venue")]
+pub mod real;
 pub mod stats;
 pub mod strategy;
 #[cfg(feature = "venue")]

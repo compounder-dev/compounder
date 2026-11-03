@@ -3,7 +3,7 @@ import { addMoney, useMarkets, useMe, type Fund as Manager, type Me } from './ap
 import { useMids } from './feed.ts';
 import { signedUsd, usd } from './format.ts';
 import { liveEquity, Positions } from './Home.tsx';
-import { Change, Link, Logo, managerColour, Spark, toneOf } from './parts.tsx';
+import { Change, Link, Logo, managerColour, toneOf } from './parts.tsx';
 import { fundPath } from './route.ts';
 import { Sheet } from './sheets.tsx';
 import { Ticker } from './Ticker.tsx';
@@ -125,7 +125,6 @@ export function FundHome({ me, setMe }: { me: Me; setMe: (me: Me) => void }) {
                     {Math.round((b.value / total) * 100)}% · {m ? stateOf(m) : ''}
                   </span>
                 </span>
-                {m && <Spark points={m.curve} tone={toneOf(m.change)} />}
                 <span className="row-end">
                   <span className="row-price">{usd(b.value)}</span>
                   <span className={`change change-${toneOf(b.cost ? b.value / b.cost - 1 : 0)}`}>{signedUsd(Math.abs(b.value - b.cost) < 0.005 ? 0 : b.value - b.cost)}</span>

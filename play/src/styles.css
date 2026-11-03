@@ -230,3 +230,6 @@ input { font: inherit; color: inherit; }
 .settings .row { min-height: 52px; }
 .chev { color: var(--text-faint); font-size: 22px; }
 .screen-manager, .screen-asset { padding-bottom: calc(env(safe-area-inset-bottom) + 110px); }
+.card-name { font-weight: 600; font-size: 16px; line-height: 22px; }
+.card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--text-faint); font-size: 13px; line-height: 18px; }
+.card-meta .tag { margin-left: 0; }

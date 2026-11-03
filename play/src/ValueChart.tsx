@@ -15,7 +15,7 @@ export function ValueChart({ points, start, height = 200 }: { points: [number, n
       layout: { background: { type: ColorType.Solid, color: 'transparent' }, textColor: '#757575', attributionLogo: false },
       grid: { vertLines: { visible: false }, horzLines: { visible: false } },
       rightPriceScale: { visible: false },
-      timeScale: { visible: false },
+      timeScale: { visible: false, fixLeftEdge: true, fixRightEdge: true },
       crosshair: { horzLine: { visible: false, labelVisible: false }, vertLine: { color: 'rgba(255,255,255,0.2)', labelVisible: false, style: LineStyle.Solid } },
       handleScale: false,
       handleScroll: false,
@@ -52,7 +52,8 @@ export function ValueChart({ points, start, height = 200 }: { points: [number, n
     s.applyOptions({ lineColor: colours[0], topColor: colours[1], bottomColor: 'rgba(0,0,0,0)' });
     s.setData(data);
     s.priceScale().applyOptions({ scaleMargins: { top: 0.15, bottom: 0.1 } });
-    chart.current?.timeScale().fitContent();
+    // Once the box has its width, the line spans all of it.
+    requestAnimationFrame(() => chart.current?.timeScale().fitContent());
   }, [points, start]);
   return <div className="chart" style={{ height }} ref={box} />;
 }

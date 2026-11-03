@@ -205,9 +205,30 @@ fn run() -> Result<(), String> {
         funds.push(Live { fund, strategy, ledger });
     }
     eprintln!("running {} funds into {}", funds.len(), dir().display());
+    let mut real = compounder_desk::real::Real::from_env(dir().join("real"))?;
+    if let Some(real) = &real {
+        eprintln!("real account {} traded by agent {} for {:?}", real.owner, real.agent(), real.mix);
+    }
+    let all_coins: Vec<String> = {
+        let mut c: Vec<String> = funds.iter().flat_map(|f| f.fund.coins()).collect();
+        c.sort();
+        c.dedup();
+        c
+    };
+    let assets = if real.is_some() { venue.assets(&all_coins)? } else { BTreeMap::new() };
     loop {
         if let Err(error) = tick(&venue, &costs, &mut funds) {
             eprintln!("{error}");
+        }
+        if let Some(real) = real.as_mut() {
+            let managers: BTreeMap<String, BTreeMap<String, f64>> = funds
+                .iter()
+                .filter_map(|live| Some((live.fund.id.clone(), replay(&live.ledger.entries).last_decision?.2)))
+                .collect();
+            let outcome = venue.markets_for(&all_coins).and_then(|markets| real.tick(&venue, now(), &managers, &markets, &assets));
+            if let Err(error) = outcome {
+                eprintln!("real: {error}");
+            }
         }
         // Wake five seconds past each minute, once the minute's bars have closed.
         let t = now();

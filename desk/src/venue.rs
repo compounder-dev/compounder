@@ -144,6 +144,41 @@ impl Venue {
         Ok(out)
     }
 
+    /// An account's margin state on the venue's own markets (`dex` empty) or on a named dex.
+    pub fn clearinghouse(&self, user: &str, dex: &str) -> Result<Value, String> {
+        self.post(json!({ "type": "clearinghouseState", "user": user, "dex": dex }))
+    }
+
+    /// The number an order names each market by: its place in its dex's list, offset
+    /// by the dex's own place for a deployed dex.
+    pub fn assets(&self, coins: &[String]) -> Result<BTreeMap<String, u32>, String> {
+        let dexes = self.post(json!({ "type": "perpDexs" }))?;
+        let mut out = BTreeMap::new();
+        let mut wanted: Vec<Option<&str>> = coins.iter().map(|c| c.split_once(':').map(|(d, _)| d)).collect();
+        wanted.sort();
+        wanted.dedup();
+        for dex in wanted {
+            let base = match dex {
+                None => 0,
+                Some(name) => {
+                    let place = dexes.as_array().and_then(|list| list.iter().position(|d| d["name"].as_str() == Some(name))).ok_or("no such dex")?;
+                    100_000 + place as u32 * 10_000
+                }
+            };
+            let meta = match dex {
+                None => self.post(json!({ "type": "meta" }))?,
+                Some(name) => self.post(json!({ "type": "meta", "dex": name }))?,
+            };
+            for (i, m) in meta["universe"].as_array().into_iter().flatten().enumerate() {
+                let coin = m["name"].as_str().unwrap_or_default().to_string();
+                if coins.contains(&coin) {
+                    out.insert(coin, base + i as u32);
+                }
+            }
+        }
+        Ok(out)
+    }
+
     pub fn book(&self, coin: &str) -> Result<Book, String> {
         let answer = self.post(json!({ "type": "l2Book", "coin": coin }))?;
         let side = |i: usize| -> Vec<(f64, f64)> {

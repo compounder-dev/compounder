@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useMarkets, useMe, type Fund } from './api.ts';
 import { stateOf } from './Fund.tsx';
 import { pct, signedUsd, usd } from './format.ts';
-import { Change, Link, ManagerMark, Spark, toneOf, TopBar } from './parts.tsx';
+import { Change, Link, ManagerMark, toneOf, TopBar } from './parts.tsx';
 import { fundPath } from './route.ts';
 import { BackSheet } from './sheets.tsx';
 import { ValueChart } from './ValueChart.tsx';
@@ -11,38 +11,58 @@ const kind = (f: { model?: string; speed: string }) => (f.model ? 'AI model' : f
 const daysLive = (f: { curve: [number, number][] }) => Math.max(1, Math.ceil((Date.now() - (f.curve[0]?.[0] ?? Date.now())) / 86_400_000));
 const day = (t: number) => new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 
+/** Managers that do not take money yet: paused, or no edge after costs in their tests. */
+const BENCH = new Set(['agent-deepseek', 'daily-reversal', 'chip-rotation']);
+
+function ManagerCard({ fund, hired }: { fund: Fund; hired: boolean }) {
+  return (
+    <Link to={fundPath(fund.id)} className="strategy-card">
+      <span className="strategy-top">
+        <ManagerMark id={fund.id} name={fund.name} />
+        <span className="row-main">
+          <span className="card-name">{fund.name}</span>
+          <span className="card-meta">
+            {hired && <span className="tag tag-on">Hired</span>}
+            {kind(fund)} · {stateOf(fund)}
+          </span>
+        </span>
+        <Change value={fund.change} />
+      </span>
+      <p className="strategy-note">{fund.thesis}</p>
+    </Link>
+  );
+}
+
 export function Managers() {
   const [data] = useMarkets();
   const [me] = useMe();
+  const funds = data?.funds ?? [];
+  const hired = new Set(me?.backed.map((b) => b.fund));
+  const groups = [
+    { title: 'In your fund', list: funds.filter((f) => hired.has(f.id)) },
+    { title: 'Live', list: funds.filter((f) => !hired.has(f.id) && !BENCH.has(f.id)) },
+    { title: 'On the bench', list: funds.filter((f) => !hired.has(f.id) && BENCH.has(f.id)) },
+  ].filter((g) => g.list.length > 0);
+  const days = funds.length ? daysLive(funds[0]) : 1;
   return (
     <>
       <header className="topbar">
         <span className="wordmark">Managers</span>
+        <span className="topbar-right">
+          <span className="pill pill-live">Day {days} live on paper</span>
+        </span>
       </header>
       {!data && <div className="loading" aria-busy="true" />}
-      {data?.funds.map((fund) => {
-        const hired = me?.backed.some((b) => b.fund === fund.id);
-        return (
-          <Link key={fund.id} to={fundPath(fund.id)} className="strategy-card">
-            <span className="strategy-top">
-              <ManagerMark id={fund.id} name={fund.name} />
-              <span className="row-main">
-                <span className="row-title">
-                  {fund.name}
-                  {hired && <span className="tag tag-on">Hired</span>}
-                </span>
-                <span className="row-sub">
-                  {kind(fund)} · {stateOf(fund)}
-                </span>
-              </span>
-              <Spark points={fund.curve} tone={toneOf(fund.change)} />
-              <Change value={fund.change} />
-            </span>
-            <p className="strategy-note">{fund.thesis}</p>
-            <span className="row-sub">Day {daysLive(fund)} live on paper</span>
-          </Link>
-        );
-      })}
+      {groups.map((g) => (
+        <section key={g.title}>
+          <div className="head">
+            <h2>{g.title}</h2>
+          </div>
+          {g.list.map((fund) => (
+            <ManagerCard key={fund.id} fund={fund} hired={hired.has(fund.id)} />
+          ))}
+        </section>
+      ))}
     </>
   );
 }
