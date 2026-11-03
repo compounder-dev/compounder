@@ -52,7 +52,7 @@ export function Asset({ id }: { id: string }) {
           </button>
         ))}
       </nav>
-      {me && me.open.some((o) => o.trade.market === id) && (
+      {me && (
         <>
           <div className="head">
             <h2>Your trades</h2>
