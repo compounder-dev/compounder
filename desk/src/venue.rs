@@ -38,8 +38,13 @@ fn num(value: &Value) -> f64 {
 
 impl Venue {
     pub fn new() -> Self {
+        Self::at(INFO_URL)
+    }
+
+    /// The venue at another address, such as the test network's.
+    pub fn at(url: &str) -> Self {
         let http = reqwest::blocking::Client::builder().timeout(Duration::from_secs(20)).build().expect("a client builds");
-        Self { http, url: INFO_URL.to_string() }
+        Self { http, url: url.to_string() }
     }
 
     fn post(&self, body: Value) -> Result<Value, String> {

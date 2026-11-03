@@ -562,12 +562,14 @@ async fn start_fund(State(play): State<Play>, user: Option<Extension<User>>, Jso
     })
 }
 
-/// The onchain fund on the home page: its venue address, its name, and the mix a copy starts with.
+/// The onchain fund on the home page: its venue address, the network it lives on,
+/// its name, and the mix a copy starts with.
 async fn onchain() -> Json<Value> {
+    let testnet = std::env::var("REAL_URL").is_ok_and(|url| url.contains("testnet"));
     let address = std::env::var("FUND_ADDRESS").ok().or_else(|| std::env::var("REAL_OWNER").ok()).filter(|a| !a.is_empty());
     let name = std::env::var("FUND_NAME").unwrap_or_else(|_| "The Compounder fund".into());
     let mix: Vec<Value> = copy_mix().into_iter().map(|(id, share)| json!({ "id": id, "share": share })).collect();
-    Json(json!({ "address": address, "name": name, "mix": mix }))
+    Json(json!({ "address": address, "testnet": testnet, "name": name, "mix": mix }))
 }
 
 #[derive(Deserialize)]

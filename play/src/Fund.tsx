@@ -22,7 +22,7 @@ const ago = (t: number) => {
   return s < 60 ? `${s}s` : s < 3600 ? `${Math.round(s / 60)}m` : s < 86_400 ? `${Math.round(s / 3600)}h` : `${Math.round(s / 86_400)}d`;
 };
 
-function Address({ address }: { address: string }) {
+function Address({ address, testnet }: { address: string; testnet: boolean }) {
   const [copied, setCopied] = useState(false);
   return (
     <span className="address">
@@ -37,7 +37,7 @@ function Address({ address }: { address: string }) {
       >
         {copied ? 'Copied' : shortAddress(address)}
       </button>
-      <a className="address-chip" href={explorer(address)} target="_blank" rel="noreferrer">
+      <a className="address-chip" href={explorer(address, testnet)} target="_blank" rel="noreferrer">
         Explorer ↗
       </a>
     </span>
@@ -45,8 +45,10 @@ function Address({ address }: { address: string }) {
 }
 
 function OnchainFund({ fund }: { fund: Onchain & { address: string } }) {
-  const account = useVenueAccount(fund.address);
-  const mids = useMids();
+  const account = useVenueAccount(fund.address, fund.testnet);
+  // Live prices are the main network's; a test account uses its own venue's numbers.
+  const live = useMids();
+  const mids = fund.testnet ? new Map<string, number>() : live;
   const [me] = useMe();
   const [data] = useMarkets();
   const [period, setPeriod] = useState<Period>('day');
@@ -62,7 +64,7 @@ function OnchainFund({ fund }: { fund: Onchain & { address: string } }) {
       <header className="topbar">
         <span className="wordmark">compounder</span>
         <span className="topbar-right">
-          <span className="pill pill-live">Onchain</span>
+          <span className="pill pill-live">{fund.testnet ? 'Testnet' : 'Onchain'}</span>
         </span>
       </header>
       <span className="portfolio-label">{fund.name}</span>
@@ -73,7 +75,7 @@ function OnchainFund({ fund }: { fund: Onchain & { address: string } }) {
         </span>
         <span className="muted"> {PERIODS.find((p) => p.key === period)!.words}</span>
       </span>
-      <Address address={fund.address} />
+      <Address address={fund.address} testnet={fund.testnet} />
       <ValueChart points={history?.value ?? []} start={history?.value[0]?.[1] ?? value} height={180} />
       <nav className="intervals" aria-label="Chart range">
         {PERIODS.map((p) => (

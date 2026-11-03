@@ -207,7 +207,7 @@ fn run() -> Result<(), String> {
     eprintln!("running {} funds into {}", funds.len(), dir().display());
     let mut real = compounder_desk::real::Real::from_env(dir().join("real"))?;
     if let Some(real) = &real {
-        eprintln!("real account {} traded by agent {} for {:?}", real.owner, real.agent(), real.mix);
+        eprintln!("real account {} on {} traded by agent {} for {:?}", real.owner, real.network(), real.agent(), real.mix);
     }
     let all_coins: Vec<String> = {
         let mut c: Vec<String> = funds.iter().flat_map(|f| f.fund.coins()).collect();
@@ -215,7 +215,10 @@ fn run() -> Result<(), String> {
         c.dedup();
         c
     };
-    let assets = if real.is_some() { venue.assets(&all_coins)? } else { BTreeMap::new() };
+    let assets = match &real {
+        Some(real) => real.venue.assets(&all_coins)?,
+        None => BTreeMap::new(),
+    };
     loop {
         if let Err(error) = tick(&venue, &costs, &mut funds) {
             eprintln!("{error}");
@@ -225,7 +228,7 @@ fn run() -> Result<(), String> {
                 .iter()
                 .filter_map(|live| Some((live.fund.id.clone(), replay(&live.ledger.entries).last_decision?.2)))
                 .collect();
-            let outcome = venue.markets_for(&all_coins).and_then(|markets| real.tick(&venue, now(), &managers, &markets, &assets));
+            let outcome = real.venue.markets_for(&all_coins).and_then(|markets| real.tick(now(), &managers, &markets, &assets));
             if let Err(error) = outcome {
                 eprintln!("real: {error}");
             }

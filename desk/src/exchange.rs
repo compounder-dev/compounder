@@ -91,6 +91,10 @@ impl Exchange {
         Ok(Exchange { http, url: url.to_string(), signer, mainnet: url == MAINNET })
     }
 
+    pub fn mainnet(&self) -> bool {
+        self.mainnet
+    }
+
     pub fn agent(&self) -> Address {
         self.signer.address()
     }

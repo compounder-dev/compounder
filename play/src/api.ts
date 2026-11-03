@@ -96,7 +96,7 @@ function usePolled<T>(path: string, every: number): [T | null | false, (t: T) =>
 }
 
 export type Markets = { markets: Market[]; funds: Fund[]; fee: number };
-export type Onchain = { address: string | null; name: string; mix: { id: string; share: number }[] };
+export type Onchain = { address: string | null; testnet: boolean; name: string; mix: { id: string; share: number }[] };
 
 export function useMarkets(): [Markets | null] {
   const [data] = usePolled<Markets>('/v1/markets', 30_000);

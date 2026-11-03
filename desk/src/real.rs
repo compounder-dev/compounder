@@ -8,7 +8,9 @@
 //! venue's answer go into the account's own ledger.
 //!
 //! It runs only when `REAL_OWNER`, `REAL_AGENT_KEY` and `REAL_MIX` are set, and
-//! stands still while a file named `paused` sits in its folder.
+//! stands still while a file named `paused` sits in its folder. `REAL_URL` picks
+//! the network; the account's positions, marks and market numbers are all read
+//! from that same network, so the test network works end to end.
 
 use std::{collections::BTreeMap, path::PathBuf};
 
@@ -30,6 +32,8 @@ const REACH: f64 = 0.01;
 pub struct Real {
     pub owner: String,
     exchange: Exchange,
+    /// The network the account lives on, read for its positions and marks.
+    pub venue: Venue,
     /// Manager id and the share of the account it runs.
     pub mix: Vec<(String, f64)>,
     ledger: Ledger,
@@ -61,7 +65,11 @@ impl Real {
             })
             .collect();
         let ledger = Ledger::open(&dir.join("ledger.jsonl")).map_err(|e| e.to_string())?;
-        Ok(Some(Real { owner: owner.to_lowercase(), exchange, mix, ledger, dir }))
+        Ok(Some(Real { owner: owner.to_lowercase(), exchange, venue: Venue::at(&format!("{url}/info")), mix, ledger, dir }))
+    }
+
+    pub fn network(&self) -> &'static str {
+        if self.exchange.mainnet() { "mainnet" } else { "testnet" }
     }
 
     pub fn agent(&self) -> String {
@@ -73,10 +81,10 @@ impl Real {
     }
 
     /// The owner's value and positions, across the venue's own markets and each named dex.
-    pub fn holdings(&self, venue: &Venue, dexes: &[&str]) -> Result<Holdings, String> {
+    pub fn holdings(&self, dexes: &[&str]) -> Result<Holdings, String> {
         let mut out = Holdings { value: 0.0, size: BTreeMap::new() };
         for dex in std::iter::once("").chain(dexes.iter().copied()) {
-            let state = venue.clearinghouse(&self.owner, dex)?;
+            let state = self.venue.clearinghouse(&self.owner, dex)?;
             out.value += num(&state["marginSummary"]["accountValue"]);
             for p in state["assetPositions"].as_array().into_iter().flatten() {
                 let coin = p["position"]["coin"].as_str().unwrap_or_default().to_string();
@@ -100,7 +108,6 @@ impl Real {
     /// One minute of the real account: compare, trade what moved enough, record it.
     pub fn tick(
         &mut self,
-        venue: &Venue,
         now: i64,
         managers: &BTreeMap<String, BTreeMap<String, f64>>,
         markets: &BTreeMap<String, Market>,
@@ -113,7 +120,7 @@ impl Real {
         let mut dexes: Vec<&str> = targets.keys().filter_map(|c| c.split_once(':').map(|(d, _)| d)).collect();
         dexes.sort();
         dexes.dedup();
-        let held = self.holdings(venue, &dexes)?;
+        let held = self.holdings(&dexes)?;
         if held.value <= 0.0 {
             return Ok(());
         }
@@ -172,6 +179,7 @@ mod tests {
         let real = Real {
             owner: String::new(),
             exchange: Exchange::new(concat!("0x01234567890123456789012345678901", "23456789012345678901234567890123"), crate::exchange::TESTNET).unwrap(),
+            venue: Venue::new(),
             mix,
             ledger: Ledger::open(&std::env::temp_dir().join(format!("real-{}.jsonl", std::process::id()))).unwrap(),
             dir: std::env::temp_dir(),
