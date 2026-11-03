@@ -1,9 +1,11 @@
 import { useEffect, useRef } from 'react';
 import { BottomBar, TopBar, type NavItem } from './parts/index.ts';
-import { BUILD, EXPLORE, matchRoute, PRICING, useAddress, type Route } from './route.ts';
+import { BUILD, EXPLORE, LIVE, matchRoute, PRICING, useAddress, type Route } from './route.ts';
 import { Build } from './screens/Build.tsx';
 import { Explore } from './screens/Explore.tsx';
 import { Home } from './screens/Home.tsx';
+import { Live } from './screens/Live.tsx';
+import { LiveFundScreen } from './screens/LiveFund.tsx';
 import { Pricing } from './screens/Pricing.tsx';
 import { StrategyScreen } from './screens/Strategy.tsx';
 import { Boundary, Broke, NotFound, OfflineBar } from './screens/System.tsx';
@@ -11,6 +13,7 @@ import { Boundary, Broke, NotFound, OfflineBar } from './screens/System.tsx';
 /** The places the bars lead to. A place joins the list when its screen is built, and not before. */
 const PLACES: NavItem[] = [
   { href: '/', label: 'Home', icon: 'home', holds: () => false },
+  { href: LIVE, label: 'Live', icon: 'pulse', holds: (path) => matchRoute(path).screen === 'live-fund' },
   { href: EXPLORE, label: 'Explore', icon: 'search', holds: (path) => matchRoute(path).screen === 'strategy' },
   { href: BUILD, label: 'Build', icon: 'pencil', holds: () => false },
   { href: PRICING, label: 'Pricing', icon: 'coin', holds: () => false },
@@ -28,6 +31,10 @@ function Screen({ route }: { route: Route }) {
       return <Pricing />;
     case 'strategy':
       return <StrategyScreen id={route.id} />;
+    case 'live':
+      return <Live />;
+    case 'live-fund':
+      return <LiveFundScreen id={route.id} />;
     case 'not-found':
       return <NotFound />;
   }

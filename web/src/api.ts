@@ -68,6 +68,45 @@ export type TestSeries = {
   benchmark: { symbol: string; values: (number | null)[] } | null;
 };
 
+/** A fund trading live on paper, as the board shows it. Times are milliseconds since 1970. */
+export type LiveFund = {
+  id: string;
+  name: string;
+  speed: 'velocity' | 'compounding';
+  thesis: string;
+  rules: string;
+  model?: string;
+  markets: string[];
+  capital: number;
+  opened: number;
+  updated: number;
+  equity: number;
+  /** Since it opened, as a fraction. */
+  change: number;
+  change_day: number | null;
+  worst_drop: number;
+  fills: number;
+  fees: number;
+  funding: number;
+  curve: [number, number][];
+  note: string;
+  decided: number | null;
+  holdings: { market: string; weight: number }[];
+  test?: { start: number; end: number; total_return: number; annual_return: number; sharpe: number; max_drawdown: number };
+  verified: boolean;
+  entries: number;
+  head: string;
+};
+
+export type LiveDetail = LiveFund & {
+  decisions: { t: number; note: string; targets: Record<string, number> }[];
+  trades: { t: number; market: string; qty: number; px: number; fee: number }[];
+  test_curve: [number, number][];
+};
+
+export const LIVE = '/v1/live';
+export const liveFundPath = (id: string) => `${LIVE}/${id}`;
+
 export const STRATEGIES = '/v1/strategies';
 export const strategyPath = (id: string) => `${STRATEGIES}/${id}`;
 export const strategyTestPath = (id: string) => `${STRATEGIES}/${id}/test`;
@@ -90,6 +129,11 @@ function put(path: string, entry: Loaded<unknown>) {
 function understood(path: string, body: unknown): boolean {
   if (typeof body !== 'object' || body === null) return false;
   if (path === STRATEGIES) return Array.isArray((body as { strategies?: unknown }).strategies);
+  if (path === LIVE) return Array.isArray((body as { funds?: unknown }).funds);
+  if (path.startsWith(`${LIVE}/`)) {
+    const { fund } = body as { fund?: unknown };
+    return typeof fund === 'object' && fund !== null;
+  }
   if (/^\/v1\/strategies\/[^/]+\/test$/.test(path)) {
     const { days, values } = body as { days?: unknown; values?: unknown };
     return Array.isArray(days) && Array.isArray(values) && days.length === values.length && days.length > 0;
@@ -164,6 +208,26 @@ export function useStrategy(id: string): [Loaded<Strategy>, () => void] {
 export function useStrategyTest(id: string): [Loaded<TestSeries>, () => void] {
   const [entry, again] = useResource(strategyTestPath(id));
   return [entry as Loaded<TestSeries>, again];
+}
+
+/** The ledgers move each minute, so a live answer is asked for again while it is on screen. */
+function useFresh(path: string) {
+  useEffect(() => {
+    const timer = window.setInterval(() => void load(path, true), 60_000);
+    return () => window.clearInterval(timer);
+  }, [path]);
+}
+
+export function useLive(): [Loaded<LiveFund[]>, () => void] {
+  const [entry, again] = useResource(LIVE);
+  useFresh(LIVE);
+  return [entry.state === 'ready' ? { state: 'ready', data: (entry.data as { funds: LiveFund[] }).funds } : entry, again];
+}
+
+export function useLiveFund(id: string): [Loaded<LiveDetail>, () => void] {
+  const [entry, again] = useResource(liveFundPath(id));
+  useFresh(liveFundPath(id));
+  return [entry.state === 'ready' ? { state: 'ready', data: (entry.data as { fund: LiveDetail }).fund } : entry, again];
 }
 
 /** Forget everything. For tests. */

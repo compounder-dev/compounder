@@ -18,6 +18,8 @@ pub enum Route {
     Build,
     Pricing,
     Strategy(String),
+    Live,
+    LiveFund(String),
     NotFound,
 }
 
@@ -34,6 +36,12 @@ pub fn route(path: &str) -> Route {
     if path == "/pricing" {
         return Route::Pricing;
     }
+    if path == "/live" {
+        return Route::Live;
+    }
+    if let Some(id) = path.strip_prefix("/live/") {
+        return if !id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') { Route::LiveFund(id.to_string()) } else { Route::NotFound };
+    }
     match path.strip_prefix("/s/") {
         Some(id) if !id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') => Route::Strategy(id.to_string()),
         _ => Route::NotFound,
@@ -49,6 +57,9 @@ pub enum Screen<'a> {
     Build,
     Pricing,
     Strategy(&'a StrategyView),
+    /// The live board and a live fund draw themselves in the browser, from ledgers that change each minute.
+    Live,
+    LiveFund,
     NotFound,
     /// The server could not make the page that was asked for.
     Broke,
@@ -60,6 +71,7 @@ const ICON_CLOCK: &str = "M10 3a7 7 0 1 0 0 14a7 7 0 0 0 0-14zm0 3.5V10l2.5 2";
 const ICON_CHECK: &str = "m4.5 10.5 3.5 3.5 7.5-8";
 const ICON_SEARCH: &str = "M9 3.5a5.5 5.5 0 1 0 0 11a5.5 5.5 0 0 0 0-11zm4 9.5 3.5 3.5";
 const ICON_PENCIL: &str = "m4 16 .8-3.2L13.6 4a1.4 1.4 0 0 1 2 0l.4.4a1.4 1.4 0 0 1 0 2L7.2 15.2 4 16z";
+const ICON_PULSE: &str = "M2.5 10h3l2-5 4 10 2-5h4";
 const ICON_COIN: &str = "M10 3a7 7 0 1 0 0 14a7 7 0 0 0 0-14zm0 3v8m2-6.2c-.4-.6-1.1-.9-2-.9-1.2 0-2 .6-2 1.4 0 2 4 .9 4 2.8 0 .8-.8 1.4-2 1.4-.9 0-1.7-.4-2.1-1";
 
 const FUND_COLOURS: [&str; 5] = ["blue", "orange", "teal", "violet", "magenta"];
@@ -470,6 +482,18 @@ const BUILD: &str = concat!(
     r#"<div class="builder-waiting" aria-busy="true"><span class="skeleton skeleton-chart" aria-hidden="true"></span></div>"#,
 );
 
+const LIVE: &str = concat!(
+    r#"<h1 class="page-title">Live</h1>"#,
+    r#"<div class="live-waiting" aria-busy="true"><span class="skeleton skeleton-chart" aria-hidden="true"></span></div>"#,
+);
+
+fn live_fund() -> String {
+    format!(
+        r#"<p class="back-link"><a class="link link-standalone" href="/live">{}All live funds</a></p><div class="live-waiting" aria-busy="true"><span class="skeleton skeleton-chart" aria-hidden="true"></span></div>"#,
+        icon(ICON_ARROW_LEFT)
+    )
+}
+
 /// The two plans: a name, a price, what the price is for, and what the plan includes.
 const PLANS: [(&str, &str, Option<&str>, [&str; 2]); 2] =
     [("Free", "$0", None, ["Build and test any fund", "Run one fund"]), ("Plus", "$20", Some("a month"), ["Everything in Free", "Run more than one fund"])];
@@ -513,6 +537,8 @@ pub fn title(screen: &Screen) -> String {
         Screen::Build => "Build a fund · Compounder".to_string(),
         Screen::Pricing => "Pricing · Compounder".to_string(),
         Screen::Strategy(view) => format!("{} · Compounder", view.name),
+        Screen::Live => "Live · Compounder".to_string(),
+        Screen::LiveFund => "Live fund · Compounder".to_string(),
         Screen::NotFound => "Page not found · Compounder".to_string(),
         Screen::Broke => "Something went wrong · Compounder".to_string(),
     }
@@ -522,13 +548,15 @@ pub fn title(screen: &Screen) -> String {
 pub fn body(path: &str, screen: &Screen) -> String {
     // A place is marked on its own screen and on the screens under it. A fund's page is under Explore.
     const PAGE: &str = r#" aria-current="page""#;
-    let (home_current, explore_current, build_current, pricing_current) = match route(path) {
-        Route::Home => (PAGE, "", "", ""),
-        Route::Explore => ("", PAGE, "", ""),
-        Route::Strategy(_) => ("", r#" aria-current="true""#, "", ""),
-        Route::Build => ("", "", PAGE, ""),
-        Route::Pricing => ("", "", "", PAGE),
-        Route::NotFound => ("", "", "", ""),
+    let (home_current, live_current, explore_current, build_current, pricing_current) = match route(path) {
+        Route::Home => (PAGE, "", "", "", ""),
+        Route::Live => ("", PAGE, "", "", ""),
+        Route::LiveFund(_) => ("", r#" aria-current="true""#, "", "", ""),
+        Route::Explore => ("", "", PAGE, "", ""),
+        Route::Strategy(_) => ("", "", r#" aria-current="true""#, "", ""),
+        Route::Build => ("", "", "", PAGE, ""),
+        Route::Pricing => ("", "", "", "", PAGE),
+        Route::NotFound => ("", "", "", "", ""),
     };
     let inside = match screen {
         Screen::Home(views) => home(views),
@@ -536,11 +564,14 @@ pub fn body(path: &str, screen: &Screen) -> String {
         Screen::Build => BUILD.to_string(),
         Screen::Pricing => pricing(),
         Screen::Strategy(view) => strategy(view),
+        Screen::Live => LIVE.to_string(),
+        Screen::LiveFund => live_fund(),
         Screen::NotFound => NOT_FOUND.to_string(),
         Screen::Broke => broke(path),
     };
     let places = [
         ("/", "Home", ICON_HOME, home_current),
+        ("/live", "Live", ICON_PULSE, live_current),
         ("/explore", "Explore", ICON_SEARCH, explore_current),
         ("/build", "Build", ICON_PENCIL, build_current),
         ("/pricing", "Pricing", ICON_COIN, pricing_current),
@@ -631,6 +662,8 @@ mod tests {
         match route(address) {
             Route::Build => body(address, &Screen::Build),
             Route::Pricing => body(address, &Screen::Pricing),
+            Route::Live => body(address, &Screen::Live),
+            Route::LiveFund(_) => body(address, &Screen::LiveFund),
             Route::Home | Route::Explore => {
                 let views: Vec<StrategyView> = serde_json::from_value(case["resources"]["/v1/strategies"]["strategies"].clone()).unwrap();
                 body(address, &if route(address) == Route::Home { Screen::Home(&views) } else { Screen::Explore(&views) })
@@ -668,6 +701,8 @@ mod tests {
                 "explore" => Route::Explore,
                 "build" => Route::Build,
                 "pricing" => Route::Pricing,
+                "live" => Route::Live,
+                "live-fund" => Route::LiveFund(case["id"].as_str().unwrap().to_string()),
                 "strategy" => Route::Strategy(case["id"].as_str().unwrap().to_string()),
                 _ => Route::NotFound,
             };

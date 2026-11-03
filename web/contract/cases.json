@@ -1234,5 +1234,15 @@
   "name": "build",
   "address": "/build",
   "resources": {}
+ },
+ {
+  "name": "live",
+  "address": "/live",
+  "resources": {}
+ },
+ {
+  "name": "live-fund",
+  "address": "/live/open-drive",
+  "resources": {}
  }
 ]

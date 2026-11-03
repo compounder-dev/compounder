@@ -2,6 +2,7 @@
 
 Funds as rules. A strategy is a document of rule trees; the engine evaluates it, backtests it over real prices, and rebalances to exact money. One settlement contract trades many funds in a single transaction, netting what one fund sells against what another buys.
 
+- `desk`: funds that trade perpetual markets on stocks, indices, commodities and crypto around the clock. Each is tested on past bars and runs live on paper into a hash-chained ledger. `cargo run -p compounder-desk --release -- test | run | verify`.
 - `engine`: strategy documents, rule evaluation, backtests, rebalancing and batching. Pure functions, no I/O.
 - `prices`: the price store.
 - `server`: the engine behind an HTTP API, serving the web app from one port.

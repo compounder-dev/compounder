@@ -1,0 +1,240 @@
+{
+  "funds": [
+    {
+      "id": "open-drive",
+      "name": "Open Drive",
+      "speed": "velocity",
+      "thesis": "When a volatile stock moves overnight, the move tends to carry on through the New York session.",
+      "rules": "Each weekday at 10:00 New York time, take the side of each volatile stock's overnight move, equal shares adding to the fund, and close everything at 16:00.",
+      "interval": "1h",
+      "capital": 10000,
+      "min_trade": 0.01,
+      "strategy": {
+        "kind": "open_drive",
+        "coins": [
+          "xyz:NVDA",
+          "xyz:TSLA",
+          "xyz:AAPL",
+          "xyz:MU",
+          "xyz:GOOGL",
+          "xyz:AMZN",
+          "xyz:META",
+          "xyz:MSFT",
+          "xyz:AMD",
+          "xyz:PLTR",
+          "xyz:INTC",
+          "xyz:ORCL",
+          "xyz:COIN",
+          "xyz:MSTR",
+          "xyz:NBIS",
+          "xyz:SNDK",
+          "xyz:CRCL",
+          "xyz:AVGO",
+          "xyz:NFLX",
+          "xyz:HOOD",
+          "xyz:SKHX",
+          "xyz:SMSN",
+          "xyz:LITE",
+          "xyz:MRVL",
+          "xyz:CRWV",
+          "xyz:DRAM",
+          "xyz:SOXL",
+          "xyz:EWY"
+        ],
+        "min_vol": 0.027,
+        "days": 20,
+        "gross": 1.0
+      }
+    },
+    {
+      "id": "daily-reversal",
+      "name": "Daily Reversal",
+      "speed": "velocity",
+      "thesis": "Yesterday's biggest movers among large stocks tend to give some of it back the next day.",
+      "rules": "Each day at midnight UTC, buy the eight stocks that fell most over the last day and short the eight that rose most, half the fund on each side.",
+      "interval": "1d",
+      "capital": 10000,
+      "min_trade": 0.01,
+      "strategy": {
+        "kind": "rank",
+        "coins": [
+          "xyz:NVDA",
+          "xyz:TSLA",
+          "xyz:AAPL",
+          "xyz:MU",
+          "xyz:GOOGL",
+          "xyz:AMZN",
+          "xyz:META",
+          "xyz:MSFT",
+          "xyz:AMD",
+          "xyz:PLTR",
+          "xyz:INTC",
+          "xyz:ORCL",
+          "xyz:COIN",
+          "xyz:MSTR",
+          "xyz:NBIS",
+          "xyz:SNDK",
+          "xyz:CRCL",
+          "xyz:AVGO",
+          "xyz:NFLX",
+          "xyz:HOOD",
+          "xyz:SKHX",
+          "xyz:SMSN",
+          "xyz:LITE",
+          "xyz:MRVL",
+          "xyz:CRWV",
+          "xyz:DRAM",
+          "xyz:SOXL",
+          "xyz:EWY"
+        ],
+        "lookback": 1,
+        "hold": 1,
+        "top": 8,
+        "short": true,
+        "reverse": true,
+        "gross": 1.0
+      }
+    },
+    {
+      "id": "oil-breakout",
+      "name": "Oil Breakout",
+      "speed": "velocity",
+      "thesis": "Oil moves in shocks. When it breaks out of its range it tends to keep going.",
+      "rules": "Every four hours, go with WTI or Brent when it closes beyond its 20-bar high or low, and leave when it crosses back past its 10-bar extreme.",
+      "interval": "4h",
+      "capital": 10000,
+      "min_trade": 0.05,
+      "strategy": {
+        "kind": "breakout",
+        "coins": [
+          "xyz:CL",
+          "xyz:BRENTOIL"
+        ],
+        "enter": 20,
+        "exit": 10,
+        "target_vol": 0.3,
+        "max_weight": 2.0,
+        "long_only": false
+      }
+    },
+    {
+      "id": "chip-rotation",
+      "name": "Chip Rotation",
+      "speed": "velocity",
+      "thesis": "Money rotates between the AI chip and memory names; the leaders of the last week tend to lead the next.",
+      "rules": "Each day, hold the two chip stocks with the best five-day return, half the fund in each.",
+      "interval": "1d",
+      "capital": 10000,
+      "min_trade": 0.05,
+      "strategy": {
+        "kind": "rank",
+        "coins": [
+          "xyz:NVDA",
+          "xyz:MU",
+          "xyz:AMD",
+          "xyz:SNDK",
+          "xyz:SKHX",
+          "xyz:INTC",
+          "xyz:MRVL",
+          "xyz:SMSN"
+        ],
+        "lookback": 5,
+        "hold": 1,
+        "top": 2,
+        "short": false,
+        "reverse": false,
+        "gross": 1.0
+      }
+    },
+    {
+      "id": "agent-deepseek",
+      "name": "DeepSeek Macro",
+      "speed": "velocity",
+      "thesis": "An open model reads gold, oil, the indices, bitcoin and two big stocks every hour and trades what it sees.",
+      "rules": "Each hour the model sets the fund's shares across eight markets, at most twice the fund in all.",
+      "interval": "1h",
+      "capital": 10000,
+      "min_trade": 0.05,
+      "strategy": {
+        "kind": "agent",
+        "coins": [
+          "xyz:GOLD",
+          "xyz:SILVER",
+          "xyz:CL",
+          "xyz:SP500",
+          "xyz:XYZ100",
+          "BTC",
+          "xyz:NVDA",
+          "xyz:TSLA"
+        ],
+        "model": "deepseek/deepseek-v4-pro",
+        "mandate": "Grow the fund steadily across macro markets. Avoid large losses. Trade only when you see a reason.",
+        "max_gross": 2.0
+      }
+    },
+    {
+      "id": "all-weather",
+      "name": "All Weather",
+      "speed": "compounding",
+      "thesis": "Stocks, gold and bitcoin rarely all fall at once. Holding all three and putting them back in balance compounds.",
+      "rules": "Hold the S&P 500 at 40%, the tech 100 at 20%, gold at 30% and bitcoin at 10%, rebalanced daily when a share drifts.",
+      "interval": "1d",
+      "capital": 10000,
+      "min_trade": 0.02,
+      "strategy": {
+        "kind": "basket",
+        "weights": {
+          "xyz:SP500": 0.4,
+          "xyz:XYZ100": 0.2,
+          "xyz:GOLD": 0.3,
+          "BTC": 0.1
+        }
+      }
+    },
+    {
+      "id": "magnificent",
+      "name": "Magnificent Seven",
+      "speed": "compounding",
+      "thesis": "The seven largest technology companies, held in equal shares and owned around the clock.",
+      "rules": "Hold Apple, Microsoft, Nvidia, Alphabet, Amazon, Meta and Tesla equally, rebalanced daily when a share drifts.",
+      "interval": "1d",
+      "capital": 10000,
+      "min_trade": 0.02,
+      "strategy": {
+        "kind": "basket",
+        "weights": {
+          "xyz:AAPL": 0.142857,
+          "xyz:MSFT": 0.142857,
+          "xyz:NVDA": 0.142857,
+          "xyz:GOOGL": 0.142857,
+          "xyz:AMZN": 0.142857,
+          "xyz:META": 0.142857,
+          "xyz:TSLA": 0.142857
+        }
+      }
+    },
+    {
+      "id": "trend-compounder",
+      "name": "Trend Compounder",
+      "speed": "compounding",
+      "thesis": "Hold the indices and gold while their long trend is up and step aside when it turns, to keep most of the gain with about half the fall.",
+      "rules": "Each day, hold the S&P 500, the tech 100 and gold while each one's 50-day average is above its 200-day average, each sized to 15% yearly volatility, at most twice the fund.",
+      "interval": "1d",
+      "capital": 10000,
+      "min_trade": 0.03,
+      "strategy": {
+        "kind": "trend",
+        "coins": [
+          "xyz:SP500",
+          "xyz:XYZ100",
+          "xyz:GOLD"
+        ],
+        "fast": 50,
+        "slow": 200,
+        "target_vol": 0.15,
+        "max_weight": 2.0,
+        "long_only": true
+      }
+    }
+  ]
+}

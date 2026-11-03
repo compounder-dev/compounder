@@ -1,0 +1,22 @@
+[package]
+name = "compounder-desk"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = ["venue"]
+# The network side: market data, order books and the model that runs agent funds.
+# Without it the crate is the pure core: accounts, fills, strategies, backtests, ledgers.
+venue = ["dep:reqwest"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["float_roundtrip"] }
+sha2 = "0.10"
+hex = "0.4"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"], optional = true }
+
+[[bin]]
+name = "compounder-desk"
+path = "src/main.rs"
+required-features = ["venue"]

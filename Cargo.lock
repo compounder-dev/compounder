@@ -1520,6 +1520,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "compounder-desk"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "compounder-engine"
 version = "0.1.0"
 dependencies = [
@@ -1558,6 +1569,7 @@ name = "compounder-server"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "compounder-desk",
  "compounder-engine",
  "compounder-prices",
  "serde",

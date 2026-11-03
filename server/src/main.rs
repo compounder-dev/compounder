@@ -6,6 +6,7 @@ mod page;
 
 mod backtest;
 mod catalogue;
+mod live;
 mod outline;
 mod prices;
 mod tested;
@@ -326,7 +327,7 @@ fn turns() -> &'static Semaphore {
 }
 
 /// The named events the app may log at this step. A name outside the list is refused.
-const EVENTS: [&str; 5] = ["home_seen", "explore_seen", "strategy_opened", "pricing_seen", "builder_opened"];
+const EVENTS: [&str; 7] = ["home_seen", "explore_seen", "strategy_opened", "pricing_seen", "builder_opened", "live_seen", "live_fund_opened"];
 
 /// One line of the app's own log: what happened, on which screen, to which strategy or fund.
 /// There is no field for who, and an unknown field is refused, so none can creep in.
@@ -356,6 +357,20 @@ async fn log_event(body: Result<Json<Event>, JsonRejection>) -> Result<StatusCod
     let Json(event) = body?;
     println!("{}", event_line(&event)?);
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// Every live fund, best since it opened first.
+async fn live_board() -> ApiResult {
+    let funds = aside(|| live::board(&live::dir())).await?;
+    Ok(Json(json!({ "funds": funds })))
+}
+
+/// One live fund with what it decided and traded lately.
+async fn live_fund(Path(id): Path<String>) -> ApiResult {
+    match aside(move || live::detail(&live::dir(), &id)).await? {
+        Some(fund) => Ok(Json(json!({ "fund": fund }))),
+        None => Err(ApiError::not_found("no such live fund")),
+    }
 }
 
 async fn unknown_api_route() -> ApiError {
@@ -388,6 +403,8 @@ enum Lookup {
     Build,
     Pricing,
     Strategy(Box<StrategyView>),
+    Live,
+    LiveFund,
     NotFound,
     /// The data for the page could not be made.
     Broke,
@@ -403,6 +420,8 @@ fn look_up(path: &str, tested: Option<&Tested>) -> Lookup {
             Some(entry) => strategy_view(entry, tested).map_or(Lookup::Broke, |view| Lookup::Strategy(Box::new(view))),
             None => Lookup::NotFound,
         },
+        page::Route::Live => Lookup::Live,
+        page::Route::LiveFund(_) => Lookup::LiveFund,
         page::Route::NotFound => Lookup::NotFound,
     }
 }
@@ -415,6 +434,8 @@ fn respond(shell: &str, path: &str, lookup: &Lookup) -> (StatusCode, Html<String
         Lookup::Build => (StatusCode::OK, page::Screen::Build),
         Lookup::Pricing => (StatusCode::OK, page::Screen::Pricing),
         Lookup::Strategy(view) => (StatusCode::OK, page::Screen::Strategy(view)),
+        Lookup::Live => (StatusCode::OK, page::Screen::Live),
+        Lookup::LiveFund => (StatusCode::OK, page::Screen::LiveFund),
         Lookup::NotFound => (StatusCode::NOT_FOUND, page::Screen::NotFound),
         Lookup::Broke => (StatusCode::INTERNAL_SERVER_ERROR, page::Screen::Broke),
     };
@@ -450,6 +471,8 @@ fn router(dist: PathBuf, prices: Option<Arc<Prices>>) -> Router {
         .route("/strategy/validate", post(validate_strategy))
         .route("/strategy/targets", post(strategy_targets))
         .route("/backtest", post(backtest_strategy))
+        .route("/live", get(live_board))
+        .route("/live/{id}", get(live_fund))
         // An event is a few words. Anything larger is not one.
         .route("/events", post(log_event).layer(DefaultBodyLimit::max(512)))
         .fallback(unknown_api_route)

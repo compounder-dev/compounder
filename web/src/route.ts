@@ -6,20 +6,25 @@ import { useEffect, useSyncExternalStore, type MouseEvent } from 'react';
 export const EXPLORE = '/explore';
 export const BUILD = '/build';
 export const PRICING = '/pricing';
+export const LIVE = '/live';
 
-export type Route = { screen: 'home' } | { screen: 'explore' } | { screen: 'build' } | { screen: 'pricing' } | { screen: 'strategy'; id: string } | { screen: 'not-found' };
+export type Route = { screen: 'home' } | { screen: 'explore' } | { screen: 'build' } | { screen: 'pricing' } | { screen: 'strategy'; id: string } | { screen: 'live' } | { screen: 'live-fund'; id: string } | { screen: 'not-found' };
 
 export function matchRoute(path: string): Route {
   if (path === '/') return { screen: 'home' };
   if (path === EXPLORE) return { screen: 'explore' };
   if (path === BUILD) return { screen: 'build' };
   if (path === PRICING) return { screen: 'pricing' };
+  if (path === LIVE) return { screen: 'live' };
+  const live = /^\/live\/([A-Za-z0-9_-]+)$/.exec(path);
+  if (live) return { screen: 'live-fund', id: live[1] };
   const strategy = /^\/s\/([A-Za-z0-9_-]+)$/.exec(path);
   if (strategy) return { screen: 'strategy', id: strategy[1] };
   return { screen: 'not-found' };
 }
 
 export const strategyAddress = (id: string) => `/s/${id}`;
+export const liveAddress = (id: string) => `${LIVE}/${id}`;
 
 /** Where an address from before real paths lives now: `#/portfolio/<id>` is `/s/<id>`. */
 export function forwardedAddress(hash: string): string | null {

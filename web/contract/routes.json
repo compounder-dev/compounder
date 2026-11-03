@@ -43,7 +43,7 @@
   "screen": "not-found"
  },
  {
-  "path": "/s/\u00e9",
+  "path": "/s/é",
   "screen": "not-found"
  },
  {
@@ -96,6 +96,23 @@
  },
  {
   "path": "/build/draft",
+  "screen": "not-found"
+ },
+ {
+  "path": "/live",
+  "screen": "live"
+ },
+ {
+  "path": "/live/open-drive",
+  "screen": "live-fund",
+  "id": "open-drive"
+ },
+ {
+  "path": "/live/",
+  "screen": "not-found"
+ },
+ {
+  "path": "/live/a/b",
   "screen": "not-found"
  }
 ]

@@ -387,3 +387,106 @@
 .builder-waiting {
   margin-top: var(--section-gap);
 }
+
+/* ---- live funds ---- */
+
+.live-waiting {
+  margin-top: var(--section-gap);
+}
+
+.live-filter {
+  margin-top: var(--space-6);
+}
+
+.live-rows {
+  margin-top: var(--space-4);
+}
+
+.live-empty {
+  margin-top: var(--space-6);
+  color: var(--text-muted);
+}
+
+.live-rank {
+  min-width: var(--space-6);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.sparkline {
+  display: none;
+  width: calc(var(--space-16) + var(--space-2));
+  height: var(--space-6);
+  color: var(--text-muted);
+}
+.sparkline-gain {
+  color: var(--status-gain);
+}
+.sparkline-loss {
+  color: var(--status-loss);
+}
+.sparkline-large {
+  display: block;
+  width: 100%;
+  height: calc(var(--space-16) * 2.5);
+  margin-top: var(--space-4);
+}
+
+.live-pill {
+  display: inline-block;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-control);
+  text-align: right;
+}
+.live-pill-gain {
+  color: var(--status-gain);
+  background: var(--status-gain-wash);
+}
+.live-pill-loss {
+  color: var(--status-loss);
+  background: var(--status-loss-wash);
+}
+
+.live-kind,
+.live-since,
+.live-when {
+  color: var(--text-muted);
+  font: var(--type-small);
+}
+
+.live-equity {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+.live-fund section {
+  margin-top: var(--section-gap);
+}
+
+.live-fund .rows {
+  margin-top: var(--space-3);
+}
+
+.live-note,
+.live-rules {
+  margin-top: var(--space-2);
+}
+
+.live-verified {
+  color: var(--status-gain);
+}
+.live-broken {
+  color: var(--status-loss);
+}
+
+/* The small line beside each fund has room from tablet width up. */
+@media (min-width: 640px) {
+  .sparkline {
+    display: block;
+  }
+  .live-pill {
+    min-width: calc(var(--space-16) + var(--space-4));
+  }
+}
