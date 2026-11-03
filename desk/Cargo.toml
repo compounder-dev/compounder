@@ -7,7 +7,7 @@ edition = "2021"
 default = ["venue"]
 # The network side: market data, order books and the model that runs agent funds.
 # Without it the crate is the pure core: accounts, fills, strategies, backtests, ledgers.
-venue = ["dep:reqwest"]
+venue = ["dep:reqwest", "dep:alloy-primitives", "dep:alloy-sol-types", "dep:alloy-signer", "dep:alloy-signer-local", "dep:rmp-serde"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
@@ -15,6 +15,12 @@ serde_json = { version = "1", features = ["float_roundtrip"] }
 sha2 = "0.10"
 hex = "0.4"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"], optional = true }
+# Signing orders for the venue: typed-data signatures over a packed action.
+alloy-primitives = { version = "1", optional = true }
+alloy-sol-types = { version = "1", features = ["eip712-serde"], optional = true }
+alloy-signer = { version = "1", optional = true }
+alloy-signer-local = { version = "1", optional = true }
+rmp-serde = { version = "1", optional = true }
 
 [[bin]]
 name = "compounder-desk"

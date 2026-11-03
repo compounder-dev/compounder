@@ -224,3 +224,9 @@ input { font: inherit; color: inherit; }
 .temperament-line { color: var(--text-muted); font-size: 14px; line-height: 20px; }
 .temperament-mix { color: var(--text-faint); font-size: 12px; }
 .mode-wide { margin-top: 16px; display: inline-flex; }
+.tag-on { background: var(--up-wash); color: var(--up); }
+.footnote { color: var(--text-faint); font-size: 12px; line-height: 18px; margin-top: 16px; }
+.settings { margin-top: 16px; border-radius: var(--r-card); background: var(--card); padding: 0 16px; }
+.settings .row { min-height: 52px; }
+.chev { color: var(--text-faint); font-size: 22px; }
+.screen-manager, .screen-asset { padding-bottom: calc(env(safe-area-inset-bottom) + 110px); }

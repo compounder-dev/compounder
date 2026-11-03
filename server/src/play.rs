@@ -197,7 +197,7 @@ pub struct Account {
     pub start: f64,
     #[serde(default)]
     pub temperament: String,
-    /// The fund's value over time, every five minutes: `[t, value]`.
+    /// The fund's value over time, every minute: `[t, value]`.
     #[serde(default)]
     pub curve: Vec<(i64, f64)>,
     pub balance: f64,
@@ -275,7 +275,7 @@ impl Play {
                     Ok(()) => play.settle(),
                     Err(error) => eprintln!("prices: {error}"),
                 }
-                if tick.is_multiple_of(150) {
+                if tick.is_multiple_of(30) {
                     if let Ok(funds) = tokio::task::spawn_blocking(fund_prices).await {
                         play.record(&funds);
                     }
@@ -293,9 +293,18 @@ impl Play {
         for account in book.accounts.values_mut().filter(|a| !a.name.is_empty()) {
             let value = account_view(self, account, funds)["equity"].as_f64().unwrap_or(account.balance);
             account.curve.push((at, value));
-            if account.curve.len() > 4000 {
-                account.curve.drain(..account.curve.len() - 4000);
-            }
+            // Minutes for the last day, hours before it.
+            let day_ago = at - 86_400_000;
+            let mut last_hour = i64::MIN;
+            account.curve.retain(|&(t, _)| {
+                if t >= day_ago {
+                    return true;
+                }
+                let hour = t / 3_600_000;
+                let keep = hour != last_hour;
+                last_hour = hour;
+                keep
+            });
         }
         self.save(&book);
     }

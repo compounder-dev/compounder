@@ -7,6 +7,8 @@
 
 pub mod account;
 pub mod backtest;
+#[cfg(feature = "venue")]
+pub mod exchange;
 pub mod fill;
 pub mod fund;
 pub mod ledger;

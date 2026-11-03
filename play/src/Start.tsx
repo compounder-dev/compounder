@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { startFund, type Me } from './api.ts';
+import { managerColour } from './parts.tsx';
 
 const TEMPERAMENTS = [
   { key: 'steady', name: 'Steady', line: 'Stocks, gold and bitcoin held in balance, with a trend filter that steps aside in a fall.', mix: [['All Weather', 60], ['Trend Compounder', 30], ['Your calls', 10]] },
@@ -7,13 +8,14 @@ const TEMPERAMENTS = [
   { key: 'bold', name: 'Bold', line: 'Mostly fast managers that trade stocks and oil every day.', mix: [['Open Drive', 45], ['Oil Breakout', 20], ['Magnificent Seven', 25], ['Your calls', 10]] },
 ] as const;
 
-const COLOURS = ['#00ec4b', '#8cc8ff', '#ffb01f', '#ffffff'];
+const IDS: Record<string, string> = { 'All Weather': 'all-weather', 'Magnificent Seven': 'magnificent', 'Open Drive': 'open-drive', 'Trend Compounder': 'trend-compounder', 'Oil Breakout': 'oil-breakout' };
+const colourOf = (name: string) => (name === 'Your calls' ? '#3a3a3a' : managerColour(IDS[name] ?? ''));
 
 export function MixBar({ mix }: { mix: readonly (readonly [string, number])[] }) {
   return (
     <span className="mixbar" aria-hidden="true">
-      {mix.map(([name, share], i) => (
-        <i key={name} style={{ width: `${share}%`, background: COLOURS[i % COLOURS.length] }} />
+      {mix.map(([name, share]) => (
+        <i key={name} style={{ width: `${share}%`, background: colourOf(name) }} />
       ))}
     </span>
   );

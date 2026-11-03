@@ -2,6 +2,33 @@ import type { ReactNode } from 'react';
 import { back, go } from './route.ts';
 import { pct } from './format.ts';
 
+/** A manager's own colour, the same everywhere it appears. */
+export const MANAGER_COLOURS: Record<string, string> = {
+  'all-weather': '#00ec4b',
+  magnificent: '#8cc8ff',
+  'open-drive': '#ffb01f',
+  'trend-compounder': '#c9b5ff',
+  'oil-breakout': '#ff8f5a',
+  'chip-rotation': '#5ee7df',
+  'daily-reversal': '#ff8fab',
+  'agent-deepseek': '#9db4ff',
+};
+export const managerColour = (id: string) => MANAGER_COLOURS[id] ?? '#bfbfbf';
+
+export function ManagerMark({ id, name }: { id: string; name: string }) {
+  const colour = managerColour(id);
+  return (
+    <span className="logo" style={{ background: `${colour}22`, color: colour, boxShadow: `inset 0 0 0 1px ${colour}55` }} aria-hidden="true">
+      {name
+        .split(' ')
+        .map((w) => w[0])
+        .join('')
+        .slice(0, 2)
+        .toUpperCase()}
+    </span>
+  );
+}
+
 export function Logo({ symbol, kind }: { symbol: string; kind?: string }) {
   return (
     <span className={`logo logo-${kind ?? 'fund'}`} aria-hidden="true">
@@ -11,7 +38,7 @@ export function Logo({ symbol, kind }: { symbol: string; kind?: string }) {
 }
 
 export function Change({ value }: { value: number | null | undefined }) {
-  const tone = value == null || value === 0 ? 'flat' : value > 0 ? 'up' : 'down';
+  const tone = toneOf(value);
   return <span className={`change change-${tone}`}>{pct(value)}</span>;
 }
 
@@ -64,4 +91,4 @@ export function Spark({ points, tone }: { points: [number, number][]; tone: 'up'
   );
 }
 
-export const toneOf = (n: number | null | undefined) => (n == null || n === 0 ? 'flat' : n > 0 ? 'up' : 'down');
+export const toneOf = (n: number | null | undefined) => (n == null || Math.abs(n) < 0.00005 ? 'flat' : n > 0 ? 'up' : 'down');

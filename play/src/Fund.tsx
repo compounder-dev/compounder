@@ -3,7 +3,7 @@ import { addMoney, useMarkets, useMe, type Fund as Manager, type Me } from './ap
 import { useMids } from './feed.ts';
 import { signedUsd, usd } from './format.ts';
 import { liveEquity, Positions } from './Home.tsx';
-import { Change, Link, Logo, Spark, toneOf } from './parts.tsx';
+import { Change, Link, Logo, managerColour, Spark, toneOf } from './parts.tsx';
 import { fundPath } from './route.ts';
 import { Sheet } from './sheets.tsx';
 import { Ticker } from './Ticker.tsx';
@@ -54,7 +54,7 @@ export function FundHome({ me, setMe }: { me: Me; setMe: (me: Me) => void }) {
   const managers = new Map((data?.funds ?? []).map((f) => [f.id, f]));
   const calls = me.open.reduce((sum, o) => sum + o.trade.stake + Math.max(-o.trade.stake, o.trade.stake * o.trade.multiplier * o.trade.side * ((mids.get(o.trade.market) ?? o.trade.entry) / o.trade.entry - 1)), 0);
   const parts = [
-    ...me.backed.map((b, i) => ({ key: b.fund, name: b.name, value: b.value, colour: SLEEVE_COLOURS[i % SLEEVE_COLOURS.length] })),
+    ...me.backed.map((b) => ({ key: b.fund, name: b.name, value: b.value, colour: managerColour(b.fund) })),
     ...(calls > 0 ? [{ key: 'calls', name: 'Your calls', value: calls, colour: '#ffffff' }] : []),
     { key: 'cash', name: 'Cash for your calls', value: Math.max(0, me.balance), colour: '#3a3a3a' },
   ];
@@ -71,8 +71,8 @@ export function FundHome({ me, setMe }: { me: Me; setMe: (me: Me) => void }) {
       </header>
       <Ticker className="hero-value num" value={equity} text={usd(equity)} />
       <span className="hero-sub">
-        <span className={today >= 0 ? 'change-up' : 'change-down'}>
-          {signedUsd(today)} (<Change value={then ? today / then : 0} />) today
+        <span className={`change-${toneOf(then ? today / then : 0)}`}>
+          {signedUsd(Math.abs(today) < 0.005 ? 0 : today)} today
         </span>
         <span className="muted">
           {' '}
@@ -113,12 +113,12 @@ export function FundHome({ me, setMe }: { me: Me; setMe: (me: Me) => void }) {
         <Link to="/managers">Hire</Link>
       </div>
       <ul className="list">
-        {me.backed.map((b, i) => {
+        {me.backed.map((b) => {
           const m = managers.get(b.fund);
           return (
             <li key={b.fund}>
               <Link to={fundPath(b.fund)} className="row">
-                <span className="swatch" style={{ background: SLEEVE_COLOURS[i % SLEEVE_COLOURS.length] }} />
+                <span className="swatch" style={{ background: managerColour(b.fund) }} />
                 <span className="row-main">
                   <span className="row-title">{b.name}</span>
                   <span className="row-sub">
@@ -128,7 +128,7 @@ export function FundHome({ me, setMe }: { me: Me; setMe: (me: Me) => void }) {
                 {m && <Spark points={m.curve} tone={toneOf(m.change)} />}
                 <span className="row-end">
                   <span className="row-price">{usd(b.value)}</span>
-                  <span className={`change ${b.value >= b.cost ? 'change-up' : 'change-down'}`}>{signedUsd(b.value - b.cost)}</span>
+                  <span className={`change change-${toneOf(b.cost ? b.value / b.cost - 1 : 0)}`}>{signedUsd(Math.abs(b.value - b.cost) < 0.005 ? 0 : b.value - b.cost)}</span>
                 </span>
               </Link>
             </li>

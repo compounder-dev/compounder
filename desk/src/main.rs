@@ -41,6 +41,7 @@ fn main() {
         Some("test") => test(args.get(1).map(String::as_str)),
         Some("run") => run(),
         Some("verify") => verify(),
+        Some("sign-test") => sign_test(),
         _ => Err("usage: compounder-desk test [fund] | run | verify".into()),
     };
     if let Err(error) = result {
@@ -346,6 +347,17 @@ fn tick(venue: &Venue, costs: &Costs, funds: &mut [Live]) -> Result<(), String> 
         let equity = state.account.equity(&held);
         live.ledger.push(now(), Event::Mark { marks: held, equity }).map_err(|e| e.to_string())?;
     }
+    Ok(())
+}
+
+/// Sends one small order to the test network from a fresh key with no money,
+/// to show the venue reads our signature as that key's.
+fn sign_test() -> Result<(), String> {
+    let key = format!("0x{}", hex::encode(alloy_signer_local::PrivateKeySigner::random().to_bytes()));
+    let exchange = compounder_desk::exchange::Exchange::new(&key, compounder_desk::exchange::TESTNET)?;
+    println!("agent {}", exchange.agent());
+    let answer = exchange.order(0, true, compounder_desk::exchange::price(10_000.0, 5), 0.001, false)?;
+    println!("{answer}");
     Ok(())
 }
 
