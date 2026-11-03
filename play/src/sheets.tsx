@@ -136,7 +136,7 @@ export function CashedOut({ trade, onClose }: { trade: Trade; onClose: () => voi
   return (
     <Modal onClose={onClose}>
       <h3>Trade closed</h3>
-      <span className={`big ${pnl >= 0 ? 'change-up' : 'change-down'}`}>{signedUsd(pnl)}</span>
+      <span className={`big change-${pnl > 0 ? 'up' : pnl < 0 ? 'down' : 'flat'}`}>{signedUsd(pnl)}</span>
       <p>
         {usd(trade.stake + pnl)} back from {usd(trade.stake)} · {minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`}
       </p>
