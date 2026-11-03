@@ -2,14 +2,15 @@
 
 import { useSyncExternalStore } from 'react';
 
-export type Route = { screen: 'fund' } | { screen: 'markets' } | { screen: 'asset'; market: string } | { screen: 'managers' } | { screen: 'manager'; id: string };
+export type Route = { screen: 'fund' } | { screen: 'you' } | { screen: 'markets' } | { screen: 'asset'; market: string } | { screen: 'strategies' } | { screen: 'strategy'; id: string };
 
 export function match(path: string): Route {
   const asset = /^\/markets\/([A-Za-z0-9:%_-]+)$/.exec(path);
   if (asset) return { screen: 'asset', market: decodeURIComponent(asset[1]) };
-  const manager = /^\/managers\/([A-Za-z0-9_-]+)$/.exec(path);
-  if (manager) return { screen: 'manager', id: manager[1] };
-  if (path === '/managers') return { screen: 'managers' };
+  const strategy = /^\/(?:strategies|managers)\/([A-Za-z0-9_-]+)$/.exec(path);
+  if (strategy) return { screen: 'strategy', id: strategy[1] };
+  if (path === '/strategies' || path === '/managers') return { screen: 'strategies' };
+  if (path === '/you') return { screen: 'you' };
   if (path === '/markets') return { screen: 'markets' };
   return { screen: 'fund' };
 }
@@ -41,4 +42,4 @@ export function usePath(): string {
 }
 
 export const tradePath = (market: string) => `/markets/${encodeURIComponent(market)}`;
-export const fundPath = (id: string) => `/managers/${id}`;
+export const fundPath = (id: string) => `/strategies/${id}`;

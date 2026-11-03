@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { useMarkets, useMe, type Trade } from './api.ts';
+import { signIn, useMarkets, useMe, type Trade } from './api.ts';
 import { Chart, RANGES, type Range } from './Chart.tsx';
 import { useMid } from './feed.ts';
 import { price } from './format.ts';
-import { Positions } from './Home.tsx';
-import { Change, TopBar } from './parts.tsx';
+import { Positions } from './Markets.tsx';
+import { Change, Link, TopBar } from './parts.tsx';
+import { fundPath } from './route.ts';
 import { Receipt, TradeSheet } from './sheets.tsx';
 
 const ABOUT: Record<string, string> = {
@@ -25,7 +26,7 @@ export function Asset({ id }: { id: string }) {
   const [trading, setTrading] = useState(false);
   const [placed, setPlaced] = useState<Trade | null>(null);
   const symbol = market?.symbol ?? id.split(':').pop() ?? id;
-  const latest = me?.open.find((o) => o.trade.market === id)?.trade;
+  const latest = me ? me.open.find((o) => o.trade.market === id)?.trade : undefined;
   const change = now && start ? now / start - 1 : null;
   const holders = (data?.funds ?? []).filter((m) => m.holdings.some((h) => h.market === symbol));
   return (
@@ -51,10 +52,14 @@ export function Asset({ id }: { id: string }) {
           </button>
         ))}
       </nav>
-      <div className="head">
-        <h2>Your calls</h2>
-      </div>
-      {me && <Positions me={me} market={id} onChange={setMe} />}
+      {me && me.open.some((o) => o.trade.market === id) && (
+        <>
+          <div className="head">
+            <h2>Your trades</h2>
+          </div>
+          <Positions me={me} market={id} onChange={setMe} />
+        </>
+      )}
       <div className="head">
         <h2>About {market?.name ?? symbol}</h2>
       </div>
@@ -62,23 +67,25 @@ export function Asset({ id }: { id: string }) {
       {holders.length > 0 && (
         <>
           <div className="head">
-            <h2>Managers holding it</h2>
+            <h2>Strategies holding it</h2>
           </div>
           <ul className="list">
             {holders.map((m) => (
-              <li key={m.id} className="row">
-                <span className="row-main">
-                  <span className="row-title">{m.name}</span>
-                  <span className="row-sub">{m.holdings.find((h) => h.market === symbol)!.weight > 0 ? 'Long' : 'Short'}</span>
-                </span>
+              <li key={m.id}>
+                <Link to={fundPath(m.id)} className="row">
+                  <span className="row-main">
+                    <span className="row-title">{m.name}</span>
+                    <span className="row-sub">{m.holdings.find((h) => h.market === symbol)!.weight > 0 ? 'Long' : 'Short'}</span>
+                  </span>
+                </Link>
               </li>
             ))}
           </ul>
         </>
       )}
       <div className="dock">
-        <button className="cta" disabled={!me || !now} onClick={() => setTrading(true)}>
-          Make a call on {symbol}
+        <button className="cta cta-up" disabled={me === null || !now} onClick={() => (me === false ? signIn() : setTrading(true))}>
+          Trade {symbol}
         </button>
       </div>
       {trading && me && (
@@ -86,6 +93,7 @@ export function Asset({ id }: { id: string }) {
           market={id}
           symbol={symbol}
           available={me.balance}
+          maxLeverage={market?.max_multiplier ?? 1}
           onClose={() => setTrading(false)}
           onPlaced={(next) => {
             setMe(next);

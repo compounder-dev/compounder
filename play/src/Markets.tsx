@@ -30,7 +30,7 @@ export function Positions({ me, market, onChange }: { me: Me; market?: string; o
   return (
     <>
       {open.length === 0 ? (
-        <p className="empty">{market ? 'No calls on this market yet.' : 'No calls yet. Pick a market to make one.'}</p>
+        <p className="empty">{market ? 'No trades on this market yet.' : 'No trades yet. Pick a market to trade.'}</p>
       ) : (
         <ul className="list group">
           {open.map(({ trade, symbol }) => {
@@ -42,7 +42,7 @@ export function Positions({ me, market, onChange }: { me: Me; market?: string; o
                   <span className="row-main">
                     <span className="row-title">{symbol}</span>
                     <span className="row-sub">
-                      <span className={trade.side > 0 ? 'side side-up' : 'side side-down'}>{trade.side > 0 ? 'UP' : 'DOWN'}</span> · {usd(trade.stake)}
+                      <span className={trade.side > 0 ? 'side side-up' : 'side side-down'}>{trade.side > 0 ? 'LONG' : 'SHORT'} {trade.multiplier}x</span> · {usd(trade.stake)}
                     </span>
                   </span>
                   <span className="row-end">

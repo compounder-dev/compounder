@@ -195,8 +195,6 @@ pub struct Account {
     /// What the fund started with, which its change is measured from.
     #[serde(default = "start_credits")]
     pub start: f64,
-    #[serde(default)]
-    pub temperament: String,
     /// The fund's value over time, every minute: `[t, value]`.
     #[serde(default)]
     pub curve: Vec<(i64, f64)>,
@@ -212,13 +210,24 @@ fn start_credits() -> f64 {
     START_CREDITS
 }
 
-/// The managers each temperament hires, and the share of the fund each runs. The
-/// tenth left over stays as cash for the owner's own calls.
-const TEMPERAMENTS: &[(&str, &[(&str, f64)])] = &[
-    ("steady", &[("all-weather", 0.6), ("trend-compounder", 0.3)]),
-    ("balanced", &[("all-weather", 0.35), ("magnificent", 0.25), ("open-drive", 0.3)]),
-    ("bold", &[("open-drive", 0.45), ("oil-breakout", 0.2), ("magnificent", 0.25)]),
-];
+/// The strategies a new fund copies, and the share of it each runs: the onchain
+/// fund's own mix where one is set as `REAL_MIX`, as `id:share,id:share`.
+/// The tenth left over stays as cash for the owner's own trades.
+fn copy_mix() -> Vec<(String, f64)> {
+    let parsed: Vec<(String, f64)> = std::env::var("REAL_MIX")
+        .unwrap_or_default()
+        .split(',')
+        .filter_map(|part| {
+            let (id, share) = part.split_once(':')?;
+            Some((id.trim().to_string(), share.trim().parse::<f64>().ok()?))
+        })
+        .collect();
+    if parsed.is_empty() {
+        return vec![("all-weather".into(), 0.35), ("magnificent".into(), 0.25), ("open-drive".into(), 0.3)];
+    }
+    let total: f64 = parsed.iter().map(|(_, s)| s).sum();
+    parsed.into_iter().map(|(id, s)| (id, 0.9 * s / total)).collect()
+}
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Backing {
@@ -398,7 +407,6 @@ fn account_view(play: &Play, account: &Account, funds: &BTreeMap<String, (f64, l
     curve.push((now_ms(), equity));
     json!({
         "fund": account.name,
-        "temperament": account.temperament,
         "curve": curve,
         "balance": account.balance,
         "equity": equity,
@@ -526,53 +534,40 @@ async fn back_fund(State(play): State<Play>, user: Option<Extension<User>>, Json
     })
 }
 
-/// Everyone ranked by what their credits are worth now.
-async fn leaderboard(State(play): State<Play>) -> Json<Value> {
-    let funds = tokio::task::spawn_blocking(fund_prices).await.unwrap_or_default();
-    let book = play.book.lock().unwrap();
-    let mut rows: Vec<Value> = book
-        .accounts
-        .iter()
-        .map(|(email, account)| {
-            let view = account_view(&play, account, &funds);
-            json!({ "name": email.split('@').next().unwrap_or("player"), "equity": view["equity"], "trades": account.trades.len() })
-        })
-        .collect();
-    rows.sort_by(|a, b| b["equity"].as_f64().unwrap_or(0.0).total_cmp(&a["equity"].as_f64().unwrap_or(0.0)));
-    Json(json!({ "players": rows, "start": START_CREDITS }))
-}
-
 #[derive(Deserialize)]
 struct Start {
-    name: String,
     amount: f64,
-    temperament: String,
 }
 
-/// Starts the fund afresh: the amount, and the managers its temperament hires.
+/// Starts the fund afresh with the amount, copying the onchain fund's mix.
 async fn start_fund(State(play): State<Play>, user: Option<Extension<User>>, Json(order): Json<Start>) -> Response {
-    let Some((_, mix)) = TEMPERAMENTS.iter().find(|(name, _)| *name == order.temperament) else {
-        return refuse(StatusCode::UNPROCESSABLE_ENTITY, "temperament is steady, balanced or bold");
-    };
     if !(order.amount.is_finite() && order.amount >= 10.0) {
         return refuse(StatusCode::UNPROCESSABLE_ENTITY, "start with at least $10");
     }
     let email = who(user);
     let funds = tokio::task::spawn_blocking(fund_prices).await.unwrap_or_default();
-    let name = if order.name.trim().is_empty() { "My Fund".to_string() } else { order.name.trim().chars().take(40).collect() };
+    let mix = copy_mix();
     with_account(&play, &email, |account, _| {
         let at = now_ms();
-        *account = Account { name, start: order.amount, temperament: order.temperament.clone(), curve: vec![(at, order.amount)], balance: order.amount, created: at, ..Account::default() };
-        for (fund, share) in mix.iter() {
-            let Some((unit, _)) = funds.get(*fund) else { continue };
+        *account = Account { name: "Your fund".into(), start: order.amount, curve: vec![(at, order.amount)], balance: order.amount, created: at, ..Account::default() };
+        for (fund, share) in &mix {
+            let Some((unit, _)) = funds.get(fund) else { continue };
             let amount = order.amount * share;
             account.balance -= amount;
-            let backing = account.backed.entry(fund.to_string()).or_default();
+            let backing = account.backed.entry(fund.clone()).or_default();
             backing.units += amount / unit;
             backing.cost += amount;
         }
         Json(account_view(&play, account, &funds)).into_response()
     })
+}
+
+/// The onchain fund on the home page: its venue address, its name, and the mix a copy starts with.
+async fn onchain() -> Json<Value> {
+    let address = std::env::var("FUND_ADDRESS").ok().or_else(|| std::env::var("REAL_OWNER").ok()).filter(|a| !a.is_empty());
+    let name = std::env::var("FUND_NAME").unwrap_or_else(|_| "The Compounder fund".into());
+    let mix: Vec<Value> = copy_mix().into_iter().map(|(id, share)| json!({ "id": id, "share": share })).collect();
+    Json(json!({ "address": address, "name": name, "mix": mix }))
 }
 
 #[derive(Deserialize)]
@@ -603,7 +598,7 @@ pub fn routes(play: Play) -> Router {
         .route("/trades", post(open_trade))
         .route("/trades/{id}/close", post(close_trade))
         .route("/back", post(back_fund))
-        .route("/leaderboard", get(leaderboard))
+        .route("/onchain", get(onchain))
         .with_state(play)
 }
 

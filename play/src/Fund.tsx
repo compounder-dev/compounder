@@ -1,180 +1,185 @@
 import { useState } from 'react';
-import { addMoney, useMarkets, useMe, type Fund as Manager, type Me } from './api.ts';
+import { useMarkets, useMe, useOnchain, signIn, type Onchain } from './api.ts';
 import { useMids } from './feed.ts';
-import { signedUsd, usd } from './format.ts';
-import { liveEquity, Positions } from './Home.tsx';
-import { Change, Link, Logo, managerColour, Money, toneOf } from './parts.tsx';
-import { fundPath } from './route.ts';
-import { Sheet } from './sheets.tsx';
+import { price, signedUsd, usd } from './format.ts';
+import { Link, Logo, managerColour, Money, toneOf } from './parts.tsx';
+import { fundPath, go } from './route.ts';
+import { shareCard } from './share.ts';
 import { Ticker } from './Ticker.tsx';
 import { ValueChart } from './ValueChart.tsx';
+import { explorer, shortAddress, symbolOf, useVenueAccount, type Period } from './venue.ts';
+import { You } from './You.tsx';
 
-export const SLEEVE_COLOURS = ['#00ec4b', '#8cc8ff', '#ffb01f', '#c9b5ff', '#ff8fab'];
+const PERIODS: { key: Period; label: string; words: string }[] = [
+  { key: 'day', label: '1D', words: 'today' },
+  { key: 'week', label: '1W', words: 'this week' },
+  { key: 'month', label: '1M', words: 'this month' },
+  { key: 'allTime', label: 'All', words: 'all time' },
+];
 
-/** A manager's state in a few words, read from what it last decided. */
-export function stateOf(m: Manager): string {
-  if (m.note.startsWith('Out until')) return 'Waits for 10:00 NY';
-  if (m.note.startsWith('Holding the morning')) return 'In until 16:00 NY';
-  if (m.note.startsWith('Paused')) return 'Paused';
-  if (m.holdings.length === 0) return 'In cash';
-  return m.holdings.length === 1 ? 'Holding 1 market' : `Holding ${m.holdings.length} markets`;
-}
+const ago = (t: number) => {
+  const s = Math.max(1, Math.round((Date.now() - t) / 1000));
+  return s < 60 ? `${s}s` : s < 3600 ? `${Math.round(s / 60)}m` : s < 86_400 ? `${Math.round(s / 3600)}h` : `${Math.round(s / 86_400)}d`;
+};
 
-function AddSheet({ onClose, onDone }: { onClose: () => void; onDone: (me: Me) => void }) {
-  const [amount, setAmount] = useState(100);
+function Address({ address }: { address: string }) {
+  const [copied, setCopied] = useState(false);
   return (
-    <Sheet onClose={onClose}>
-      <div className="sheet-head">
-        <h3>Add practice money</h3>
-        <span>Real USDC soon</span>
-      </div>
-      <div className="start-presets">
-        {[50, 100, 500, 1000].map((a) => (
-          <button key={a} className={`chip${a === amount ? ' chip-on' : ''}`} onClick={() => setAmount(a)}>
-            ${a}
-          </button>
-        ))}
-      </div>
-      <p className="about">It lands as cash in your fund. Hire a manager to put it to work.</p>
-      <button className="cta cta-up" onClick={() => addMoney(amount).then(onDone)}>
-        Add {usd(amount)}
+    <span className="address">
+      <button
+        className="address-chip num"
+        onClick={() =>
+          navigator.clipboard?.writeText(address).then(() => {
+            setCopied(true);
+            window.setTimeout(() => setCopied(false), 1200);
+          })
+        }
+      >
+        {copied ? 'Copied' : shortAddress(address)}
       </button>
-    </Sheet>
+      <a className="address-chip" href={explorer(address)} target="_blank" rel="noreferrer">
+        Explorer ↗
+      </a>
+    </span>
   );
 }
 
-export function FundHome({ me, setMe }: { me: Me; setMe: (me: Me) => void }) {
-  const [data] = useMarkets();
+function OnchainFund({ fund }: { fund: Onchain & { address: string } }) {
+  const account = useVenueAccount(fund.address);
   const mids = useMids();
-  const [adding, setAdding] = useState(false);
-  const equity = liveEquity(me, mids);
-  const dayAgo = Date.now() - 86_400_000;
-  const then = [...me.curve].reverse().find(([t]) => t <= dayAgo)?.[1] ?? me.start;
-  const today = equity - then;
-  const managers = new Map((data?.funds ?? []).map((f) => [f.id, f]));
-  const calls = me.open.reduce((sum, o) => sum + o.trade.stake + Math.max(-o.trade.stake, o.trade.stake * o.trade.multiplier * o.trade.side * ((mids.get(o.trade.market) ?? o.trade.entry) / o.trade.entry - 1)), 0);
-  const parts = [
-    ...me.backed.map((b) => ({ key: b.fund, name: b.name, value: b.value, colour: managerColour(b.fund) })),
-    ...(calls > 0 ? [{ key: 'calls', name: 'Your calls', value: calls, colour: '#ffffff' }] : []),
-    { key: 'cash', name: 'Cash for your calls', value: Math.max(0, me.balance), colour: '#3a3a3a' },
-  ];
-  const total = parts.reduce((s, p) => s + p.value, 0) || 1;
-  const hired = me.backed.map((b) => managers.get(b.fund)).filter((m): m is Manager => !!m);
-  const fees = (data?.funds ?? []).length ? me.history.reduce((s, h) => s + h.trade.fee, 0) + me.open.reduce((s, o) => s + o.trade.fee, 0) : 0;
+  const [me] = useMe();
+  const [data] = useMarkets();
+  const [period, setPeriod] = useState<Period>('day');
+  const history = account?.history[period];
+  const value = account?.history.day.value.at(-1)?.[1] ?? 0;
+  const pnl = history?.pnl.at(-1)?.[1] ?? 0;
+  const base = value - pnl;
+  const names = new Map((data?.funds ?? []).map((f) => [f.id, f.name]));
+  const hasFund = me && me.fund;
+  const copy = () => (me === false ? signIn('/you') : go('/you'));
   return (
     <>
-      <section className="panel">
-        <header className="topbar">
-          <span className="fund-name">
-            {me.fund}
-            <span className="pill">Practice</span>
-          </span>
-        </header>
-        <div className="panel-row">
-          <span className="portfolio-label">Your fund</span>
-          <span className="portfolio-label">Cash for calls</span>
-        </div>
-        <div className="panel-row panel-values">
-          <Ticker className="hero-value num" value={equity} text={<Money value={equity} />} />
-          <Money className="panel-cash num" value={Math.max(0, me.balance)} />
-        </div>
-        <span className="hero-sub">
-          <span className={`change-${toneOf(then ? today / then : 0)}`}>{signedUsd(Math.abs(today) < 0.005 ? 0 : today)} today</span>
-          <span className="muted">
-            {' '}
-            · <Change value={me.start ? equity / me.start - 1 : 0} /> since start
-          </span>
+      <header className="topbar">
+        <span className="wordmark">compounder</span>
+        <span className="topbar-right">
+          <span className="pill pill-live">Onchain</span>
         </span>
-        <button className="pill-button" onClick={() => setAdding(true)}>
-          Add money <span aria-hidden="true">»</span>
-        </button>
-      </section>
-      <ValueChart points={me.curve} start={me.start} />
+      </header>
+      <span className="portfolio-label">{fund.name}</span>
+      <Ticker className={`hero-value num${value >= 1e6 ? ' hero-long' : ''}`} value={value} text={account ? <Money value={value} /> : '–'} />
+      <span className="hero-sub">
+        <span className={`change-${toneOf(base ? pnl / base : 0)}`}>
+          {signedUsd(Math.abs(pnl) < 0.005 ? 0 : pnl)} {base > 0 ? `(${((pnl / base) * 100).toFixed(2)}%)` : ''}
+        </span>
+        <span className="muted"> {PERIODS.find((p) => p.key === period)!.words}</span>
+      </span>
+      <Address address={fund.address} />
+      <ValueChart points={history?.value ?? []} start={history?.value[0]?.[1] ?? value} height={180} />
+      <nav className="intervals" aria-label="Chart range">
+        {PERIODS.map((p) => (
+          <button key={p.key} className={`interval${p.key === period ? ' interval-on' : ''}`} onClick={() => setPeriod(p.key)}>
+            {p.label}
+          </button>
+        ))}
+      </nav>
 
-      <div className="alloc">
-        <span className="mixbar mixbar-big" aria-hidden="true">
-          {parts.map((p) => (
-            <i key={p.key} style={{ width: `${(p.value / total) * 100}%`, background: p.colour }} />
-          ))}
-        </span>
-        <span className="legend">
-          {parts.map((p) => (
-            <span key={p.key}>
-              <i style={{ background: p.colour }} />
-              {p.name} {Math.round((p.value / total) * 100)}%
-            </span>
-          ))}
-        </span>
-      </div>
-
-      {hired.length > 0 && (
-        <section className="today">
-          <h2>Today</h2>
-          {hired.map((m) => (
-            <p key={m.id}>
-              <b>{m.name}.</b> {m.note || 'Waiting for its first decision.'}
-            </p>
-          ))}
-        </section>
+      {fund.mix.length > 0 && (
+        <>
+          <div className="head">
+            <h2>Strategies</h2>
+            <Link to="/strategies">All</Link>
+          </div>
+          <span className="mixbar mixbar-big" aria-hidden="true">
+            {fund.mix.map((m) => (
+              <i key={m.id} style={{ width: `${m.share * 100}%`, background: managerColour(m.id) }} />
+            ))}
+          </span>
+          <span className="legend">
+            {fund.mix.map((m) => (
+              <Link key={m.id} to={fundPath(m.id)}>
+                <i style={{ background: managerColour(m.id) }} />
+                {names.get(m.id) ?? m.id} {Math.round(m.share * 100)}%
+              </Link>
+            ))}
+          </span>
+        </>
       )}
 
       <div className="head">
-        <h2>Managers</h2>
-        <Link to="/managers">Hire</Link>
+        <h2>Positions</h2>
+        <span className="row-sub">{account ? account.positions.length : ''}</span>
       </div>
+      {account && account.positions.length === 0 && <p className="empty">All in cash right now.</p>}
       <ul className="list group">
-        {me.backed.map((b) => {
-          const m = managers.get(b.fund);
+        {account?.positions.map((p) => {
+          // The venue's own numbers, moved with the live price between reads.
+          const mid = mids.get(p.coin);
+          const upnl = mid ? p.size * (mid - p.entry) : p.pnl;
+          const value = mid ? Math.abs(p.size * mid) : p.value;
+          const symbol = symbolOf(p.coin);
           return (
-            <li key={b.fund}>
-              <Link to={fundPath(b.fund)} className="row">
-                <span className="swatch" style={{ background: managerColour(b.fund) }} />
+            <li key={p.coin}>
+              <Link to={`/markets/${encodeURIComponent(p.coin)}`} className="row">
+                <Logo symbol={symbol} kind="stocks" />
                 <span className="row-main">
-                  <span className="row-title">{b.name}</span>
+                  <span className="row-title">{symbol}</span>
                   <span className="row-sub">
-                    {Math.round((b.value / total) * 100)}% · {m ? stateOf(m) : ''}
+                    <span className={p.size > 0 ? 'side side-up' : 'side side-down'}>
+                      {p.size > 0 ? 'LONG' : 'SHORT'} {p.leverage}x
+                    </span>{' '}
+                    · {usd(value)} · in at {price(p.entry)}
                   </span>
                 </span>
                 <span className="row-end">
-                  <span className="row-price">{usd(b.value)}</span>
-                  <span className={`change change-${toneOf(b.cost ? b.value / b.cost - 1 : 0)}`}>{signedUsd(Math.abs(b.value - b.cost) < 0.005 ? 0 : b.value - b.cost)}</span>
+                  <span className={`row-price change-${toneOf(upnl)}`}>{signedUsd(upnl)}</span>
+                  <span className="row-sub num">{p.margin > 0 ? `${((upnl / p.margin) * 100).toFixed(1)}%` : ''}</span>
                 </span>
               </Link>
             </li>
           );
         })}
       </ul>
-      {me.backed.length === 0 && <p className="empty">No managers yet. Hire one to put your cash to work.</p>}
 
-      {me.open.length > 0 && (
-        <>
-          <div className="head">
-            <h2>Your calls</h2>
-            <Link to="/markets">Markets</Link>
-          </div>
-          <Positions me={me} onChange={setMe} />
-        </>
-      )}
+      <div className="head">
+        <h2>Trades</h2>
+        <span className="pill pill-live">Live</span>
+      </div>
+      {account && account.fills.length === 0 && <p className="empty">No trades yet.</p>}
+      <ul className="tape">
+        {account?.fills.slice(0, 20).map((f) => (
+          <li key={`${f.hash}-${f.time}-${f.coin}`}>
+            <span className={f.buy ? 'side-up' : 'side-down'}>{f.buy ? 'BUY' : 'SELL'}</span>
+            <b>{symbolOf(f.coin)}</b>
+            <span className="num">{usd(f.size * f.price)}</span>
+            <span className="num muted">@ {price(f.price)}</span>
+            <span className={`num tape-pnl change-${toneOf(f.pnl)}`}>{f.pnl ? signedUsd(f.pnl) : ''}</span>
+            <span className="num muted">{ago(f.time)}</span>
+          </li>
+        ))}
+      </ul>
 
-      <p className="proof">Live prices from Hyperliquid · every manager trade on a verified record · fees {usd(fees)}</p>
+      <p className="proof">
+        Every number here is read live from the chain. Check it yourself on the explorer.
+      </p>
 
-      {adding && (
-        <AddSheet
-          onClose={() => setAdding(false)}
-          onDone={(next) => {
-            setMe(next);
-            setAdding(false);
-          }}
-        />
-      )}
+      <div className="dock dock-tabs">
+        <div className="sides">
+          <button className="cta" onClick={() => shareCard({ title: fund.name, big: signedUsd(pnl), tone: toneOf(pnl), sub: `${usd(value)} onchain · ${shortAddress(fund.address)}` })}>
+            Share
+          </button>
+          <button className="cta cta-up" onClick={copy}>
+            {hasFund ? 'Your copy' : 'Copy this fund'}
+          </button>
+        </div>
+      </div>
     </>
   );
 }
 
-export function FundScreen() {
-  const [me, setMe] = useMe();
-  if (!me) return <div className="loading" aria-busy="true" />;
-  return <FundHome me={me} setMe={setMe} />;
+/** The home page: the onchain fund where one is linked, otherwise your own. */
+export function Home() {
+  const fund = useOnchain();
+  if (!fund) return <div className="loading" aria-busy="true" />;
+  if (!fund.address) return <You />;
+  return <OnchainFund fund={{ ...fund, address: fund.address }} />;
 }
-
-export { Logo };

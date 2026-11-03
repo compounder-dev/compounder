@@ -126,7 +126,10 @@ pub async fn gate(State(auth): State<Auth>, mut request: Request, next: Next) ->
         return next.run(request).await;
     }
     let path = request.uri().path();
-    let open = matches!(path, "/login" | "/signup" | "/logout" | "/health")
+    // Anyone can look: every page, the markets and the onchain fund. Acting needs an account.
+    let looking = request.method() == axum::http::Method::GET && (!path.starts_with("/v1/") || matches!(path, "/v1/markets" | "/v1/onchain"));
+    let open = looking
+        || matches!(path, "/login" | "/signup" | "/logout" | "/health")
         || path.starts_with("/assets/")
         || path.rsplit('/').next().is_some_and(|last| last.contains('.'));
     if open {
@@ -325,16 +328,21 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn signed_out_is_sent_to_sign_in_and_an_invite_opens_an_account_that_signs_in() {
+    async fn signed_out_can_look_but_not_act_and_an_invite_opens_an_account_that_signs_in() {
         let dir = std::env::temp_dir().join(format!("auth-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let auth = Auth::at(dir.clone(), Some("let-me-in".into()));
 
         let page = app(auth.clone()).oneshot(HttpRequest::get("/live").body(Body::empty()).unwrap()).await.unwrap();
-        assert_eq!(page.status(), StatusCode::SEE_OTHER);
-        assert_eq!(page.headers()[header::LOCATION], "/login?next=/live");
-        let api = app(auth.clone()).oneshot(HttpRequest::get("/v1/live").body(Body::empty()).unwrap()).await.unwrap();
-        assert_eq!(api.status(), StatusCode::UNAUTHORIZED);
+        assert_ne!(page.status(), StatusCode::SEE_OTHER);
+        let markets = app(auth.clone()).oneshot(HttpRequest::get("/v1/markets").body(Body::empty()).unwrap()).await.unwrap();
+        assert_ne!(markets.status(), StatusCode::UNAUTHORIZED);
+        let me = app(auth.clone()).oneshot(HttpRequest::get("/v1/me").body(Body::empty()).unwrap()).await.unwrap();
+        assert_eq!(me.status(), StatusCode::UNAUTHORIZED);
+        let act = app(auth.clone()).oneshot(HttpRequest::post("/v1/trades").body(Body::empty()).unwrap()).await.unwrap();
+        assert_eq!(act.status(), StatusCode::UNAUTHORIZED);
+        let post_page = app(auth.clone()).oneshot(HttpRequest::post("/live").body(Body::empty()).unwrap()).await.unwrap();
+        assert_eq!(post_page.status(), StatusCode::SEE_OTHER);
 
         let refused = app(auth.clone()).oneshot(form("/signup", "invite=nope&email=a%40b.co&password=longenough", None)).await.unwrap();
         assert_eq!(refused.status(), StatusCode::NOT_FOUND);

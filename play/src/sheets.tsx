@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { backFund, closeTrade, openTrade, type Me, type Trade } from './api.ts';
+import { closeTrade, copyStrategy, openTrade, type Me, type Trade } from './api.ts';
 import { price, signedUsd, usd } from './format.ts';
+import { shareCard } from './share.ts';
 
 export function Sheet({ onClose, children }: { onClose: () => void; children: ReactNode }) {
   useEffect(() => {
@@ -30,11 +31,13 @@ export function Modal({ onClose, children }: { onClose: () => void; children: Re
 
 const fill = (value: number, min: number, max: number) => ({ '--fill': `${max > min ? ((value - min) / (max - min)) * 100 : 0}%` }) as React.CSSProperties;
 
-/** Pick a side, an amount and a multiplier, and place it. */
-export function TradeSheet({ market, symbol, available, onClose, onPlaced }: { market: string; symbol: string; available: number; onClose: () => void; onPlaced: (me: Me) => void }) {
+const LEVERAGE = [1, 2, 5, 10, 20];
+
+/** Pick a side, an amount and leverage, and place it. */
+export function TradeSheet({ market, symbol, available, maxLeverage, onClose, onPlaced }: { market: string; symbol: string; available: number; maxLeverage: number; onClose: () => void; onPlaced: (me: Me) => void }) {
   const [side, setSide] = useState<'up' | 'down' | null>(null);
   const [amount, setAmount] = useState(Math.max(0, Math.floor(available / 2)));
-  const multiplier = 1;
+  const [multiplier, setMultiplier] = useState(1);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const place = () => {
@@ -52,15 +55,15 @@ export function TradeSheet({ market, symbol, available, onClose, onPlaced }: { m
   return (
     <Sheet onClose={onClose}>
       <div className="sheet-head">
-        <h3>Your call on {symbol}</h3>
+        <h3>Trade {symbol}</h3>
         <span className="num">{usd(available)} available</span>
       </div>
       <div className="sides">
         <button className={`go go-up${side === 'up' ? ' go-on' : side ? ' go-dim' : ''}`} onClick={() => setSide('up')}>
-          ▲ Up
+          Long
         </button>
         <button className={`go go-down${side === 'down' ? ' go-on' : side ? ' go-dim' : ''}`} onClick={() => setSide('down')}>
-          ▼ Down
+          Short
         </button>
       </div>
       <div className="field">
@@ -72,9 +75,16 @@ export function TradeSheet({ market, symbol, available, onClose, onPlaced }: { m
         </div>
         <input className="slider" type="range" min={0} max={Math.max(1, Math.floor(available))} step={1} value={amount} style={fill(amount, 0, Math.floor(available))} onChange={(e) => setAmount(Number(e.target.value))} aria-label="Amount" />
       </div>
+      <div className="start-presets">
+        {LEVERAGE.filter((x) => x <= maxLeverage).map((x) => (
+          <button key={x} className={`chip${x === multiplier ? ' chip-on' : ''}`} onClick={() => setMultiplier(x)}>
+            {x}x
+          </button>
+        ))}
+      </div>
       <div className="summary">
         <span>
-          If {symbol} moves 5%<b>{side === 'down' ? '' : '+'}{usd(amount * 0.05)}</b>
+          If {symbol} moves 5% your way<b>+{usd(amount * multiplier * 0.05)}</b>
         </span>
         <span style={{ textAlign: 'right' }}>
           Most you can lose<b>{usd(amount)}</b>
@@ -82,7 +92,7 @@ export function TradeSheet({ market, symbol, available, onClose, onPlaced }: { m
       </div>
       {error && <p className="error">{error}</p>}
       <button className={`cta${side === 'up' ? ' cta-up' : ''}`} disabled={!side || busy || amount < 1} onClick={place}>
-        {busy ? 'Placing…' : side ? 'Make the call' : 'Pick Up or Down'}
+        {busy ? 'Placing…' : side ? `${side === 'up' ? 'Long' : 'Short'} ${symbol} ${multiplier}x` : 'Pick Long or Short'}
       </button>
     </Sheet>
   );
@@ -91,15 +101,15 @@ export function TradeSheet({ market, symbol, available, onClose, onPlaced }: { m
 export function Receipt({ trade, symbol, onClose }: { trade: Trade; symbol: string; onClose: () => void }) {
   return (
     <Modal onClose={onClose}>
-      <h3>Call placed</h3>
-      <p>Your {symbol} call is in your fund.</p>
+      <h3>Trade open</h3>
+      <p>Your {symbol} trade is in your fund.</p>
       <dl className="receipt">
         <div>
-          <dt>Direction</dt>
-          <dd className={trade.side > 0 ? 'side-up' : 'side-down'}>{trade.side > 0 ? 'UP' : 'DOWN'}</dd>
+          <dt>Side</dt>
+          <dd className={trade.side > 0 ? 'side-up' : 'side-down'}>{trade.side > 0 ? 'LONG' : 'SHORT'} {trade.multiplier}x</dd>
         </div>
         <div>
-          <dt>Entry Price</dt>
+          <dt>Entry</dt>
           <dd>{price(trade.entry)}</dd>
         </div>
         <div>
@@ -119,15 +129,20 @@ export function CashedOut({ trade, onClose }: { trade: Trade; onClose: () => voi
   const minutes = Math.max(1, Math.round(((trade.close?.at ?? Date.now()) - trade.opened) / 60000));
   return (
     <Modal onClose={onClose}>
-      <h3>Call closed</h3>
+      <h3>Trade closed</h3>
       <span className={`big ${pnl >= 0 ? 'change-up' : 'change-down'}`}>{signedUsd(pnl)}</span>
       <p>
         {usd(trade.stake + pnl)} back from {usd(trade.stake)} · {minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`}
       </p>
       <div style={{ height: 20 }} />
-      <button className="cta" onClick={onClose}>
-        Done
-      </button>
+      <div className="sides">
+        <button className="cta" onClick={() => shareCard({ title: `${trade.side > 0 ? 'Long' : 'Short'} ${trade.market.split(':').pop()} ${trade.multiplier}x`, big: signedUsd(pnl), tone: pnl > 0 ? 'up' : pnl < 0 ? 'down' : 'flat', sub: `${((pnl / trade.stake) * 100).toFixed(1)}% on ${usd(trade.stake)}` })}>
+          Share
+        </button>
+        <button className="cta cta-up" onClick={onClose}>
+          Done
+        </button>
+      </div>
     </Modal>
   );
 }
@@ -139,14 +154,14 @@ export async function cashOut(id: string): Promise<{ me: Me; trade?: Trade }> {
   return { me, trade: me.history.find((h) => h.trade.id === id)?.trade };
 }
 
-/** Put credits into an AI fund. */
-export function BackSheet({ fund, name, available, held, onClose, onDone }: { fund: string; name: string; available: number; held: number; onClose: () => void; onDone: (me: Me) => void }) {
+/** Copy a strategy with an amount, change it, or stop. */
+export function CopySheet({ fund, name, available, held, onClose, onDone }: { fund: string; name: string; available: number; held: number; onClose: () => void; onDone: (me: Me) => void }) {
   const [amount, setAmount] = useState(Math.floor(available));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const go = (credits: number) => {
     setBusy(true);
-    backFund(fund, credits)
+    copyStrategy(fund, credits)
       .then(onDone)
       .catch((e: Error) => setError(e.message))
       .finally(() => setBusy(false));
@@ -154,7 +169,7 @@ export function BackSheet({ fund, name, available, held, onClose, onDone }: { fu
   return (
     <Sheet onClose={onClose}>
       <div className="sheet-head">
-        <h3>Hire {name}</h3>
+        <h3>Copy {name}</h3>
         <span className="num">{usd(available)} available</span>
       </div>
       <div className="field">
@@ -168,7 +183,7 @@ export function BackSheet({ fund, name, available, held, onClose, onDone }: { fu
       </div>
       <div className="summary">
         <span>
-          Already in<b>{usd(held)}</b>
+          Copying now<b>{usd(held)}</b>
         </span>
         <span style={{ textAlign: 'right' }}>
           After<b>{usd(held + amount)}</b>
@@ -178,11 +193,11 @@ export function BackSheet({ fund, name, available, held, onClose, onDone }: { fu
       <div className="sides">
         {held > 0 && (
           <button className="cta" style={{ background: 'var(--surface)', color: '#fff' }} disabled={busy} onClick={() => go(0)}>
-            Fire
+            Stop copying
           </button>
         )}
         <button className="cta cta-up" disabled={busy || amount < 1} onClick={() => go(amount)}>
-          {busy ? 'Hiring…' : `Give it ${usd(amount)}`}
+          {busy ? 'Copying…' : `Copy with ${usd(amount)}`}
         </button>
       </div>
     </Sheet>

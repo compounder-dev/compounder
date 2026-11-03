@@ -1,102 +1,108 @@
 import { useState } from 'react';
-import { useMarkets, useMe, type Fund } from './api.ts';
-import { stateOf } from './Fund.tsx';
+import { signIn, useMarkets, useMe, type Fund as Strategy } from './api.ts';
 import { pct, signedUsd, usd } from './format.ts';
 import { Change, Link, ManagerMark, toneOf, TopBar } from './parts.tsx';
 import { fundPath } from './route.ts';
-import { BackSheet } from './sheets.tsx';
+import { CopySheet } from './sheets.tsx';
 import { ValueChart } from './ValueChart.tsx';
 
-const kind = (f: { model?: string; speed: string }) => (f.model ? 'AI model' : f.speed === 'velocity' ? 'Fast' : 'Long-term');
+const kind = (f: { model?: string; speed: string }) => (f.model ? 'AI' : f.speed === 'velocity' ? 'Intraday' : 'Long-term');
 const daysLive = (f: { curve: [number, number][] }) => Math.max(1, Math.ceil((Date.now() - (f.curve[0]?.[0] ?? Date.now())) / 86_400_000));
 const day = (t: number) => new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 
-/** Managers that do not take money yet: paused, or no edge after costs in their tests. */
-const BENCH = new Set(['agent-deepseek', 'daily-reversal', 'chip-rotation']);
+/** Strategies that do not take money yet: paused, or no edge after costs in their tests. */
+const PAUSED = new Set(['agent-deepseek', 'daily-reversal', 'chip-rotation']);
 
-function ManagerCard({ fund, hired }: { fund: Fund; hired: boolean }) {
-  return (
-    <Link to={fundPath(fund.id)} className="strategy-card">
-      <span className="strategy-top">
-        <ManagerMark id={fund.id} name={fund.name} />
-        <span className="row-main">
-          <span className="card-name">{fund.name}</span>
-          <span className="card-meta">
-            {hired && <span className="tag tag-on">Hired</span>}
-            {kind(fund)} · {stateOf(fund)}
-          </span>
-        </span>
-        <Change value={fund.change} />
-      </span>
-      <p className="strategy-note">{fund.thesis}</p>
-    </Link>
-  );
+/** A strategy's state in a few words, read from what it last decided. */
+export function stateOf(m: Strategy): string {
+  if (PAUSED.has(m.id) || m.note.startsWith('Paused')) return 'Paused';
+  if (m.note.startsWith('Out until')) return 'Waits for 10:00 NY';
+  if (m.note.startsWith('Holding the morning')) return 'In until 16:00 NY';
+  if (m.holdings.length === 0) return 'In cash';
+  return m.holdings.length === 1 ? 'Holding 1 market' : `Holding ${m.holdings.length} markets`;
 }
 
-export function Managers() {
+/** Every strategy, best live return first. */
+export function Strategies() {
   const [data] = useMarkets();
   const [me] = useMe();
-  const funds = data?.funds ?? [];
-  const hired = new Set(me?.backed.map((b) => b.fund));
-  const groups = [
-    { title: 'In your fund', list: funds.filter((f) => hired.has(f.id)) },
-    { title: 'Live', list: funds.filter((f) => !hired.has(f.id) && !BENCH.has(f.id)) },
-    { title: 'On the bench', list: funds.filter((f) => !hired.has(f.id) && BENCH.has(f.id)) },
-  ].filter((g) => g.list.length > 0);
-  const days = funds.length ? daysLive(funds[0]) : 1;
+  const copying = new Set(me ? me.backed.map((b) => b.fund) : []);
+  const ranked = [...(data?.funds ?? [])].sort((a, b) => Number(PAUSED.has(a.id)) - Number(PAUSED.has(b.id)) || b.change - a.change);
   return (
     <>
       <header className="topbar">
-        <span className="wordmark">Managers</span>
-        <span className="topbar-right">
-          <span className="pill pill-live">Day {days} live on paper</span>
-        </span>
+        <span className="wordmark">Strategies</span>
+        <span className="topbar-right">{ranked[0] && <span className="pill pill-live">Day {daysLive(ranked[0])} live</span>}</span>
       </header>
       {!data && <div className="loading" aria-busy="true" />}
-      {groups.map((g) => (
-        <section key={g.title}>
-          <div className="head">
-            <h2>{g.title}</h2>
-          </div>
-          {g.list.map((fund) => (
-            <ManagerCard key={fund.id} fund={fund} hired={hired.has(fund.id)} />
-          ))}
-        </section>
-      ))}
+      <ul className="list group">
+        {ranked.map((s, i) => (
+          <li key={s.id}>
+            <Link to={fundPath(s.id)} className="row">
+              <span className="rank num">{i + 1}</span>
+              <ManagerMark id={s.id} name={s.name} />
+              <span className="row-main">
+                <span className="row-title">
+                  {s.name}
+                  {copying.has(s.id) && <span className="tag tag-on">Copying</span>}
+                </span>
+                <span className="row-sub">
+                  {kind(s)} · {stateOf(s)}
+                </span>
+              </span>
+              <span className="row-end">
+                <Change value={s.change} />
+                <span className="row-sub num">{s.fills} trades</span>
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
     </>
   );
 }
 
-function Record({ fund }: { fund: Fund }) {
+export function StrategyPage({ id }: { id: string }) {
+  const [data] = useMarkets();
+  const [me, setMe] = useMe();
+  const [sheet, setSheet] = useState(false);
+  const s = data?.funds.find((f) => f.id === id);
+  if (!s) return <TopBar backTo="/strategies" />;
+  const held = me ? me.backed.find((b) => b.fund === id) : undefined;
   return (
     <>
-      <div className="head">
-        <h2>Its record</h2>
-        <span className="pill pill-live">Day {daysLive(fund)} live</span>
+      <TopBar
+        backTo="/strategies"
+        title={
+          <>
+            <b>{s.name}</b>
+            <span>
+              {kind(s)} · {stateOf(s)}
+            </span>
+          </>
+        }
+      />
+      <div className="quote">
+        <span className={`quote-price change-${toneOf(s.change)}`}>{pct(s.change)}</span>
+        <span className="row-sub">
+          {daysLive(s)} {daysLive(s) === 1 ? 'day' : 'days'} live · {s.fills} trades · worst drop {pct(-s.worst_drop)}
+        </span>
       </div>
-      <ValueChart points={fund.curve} start={fund.capital} height={160} />
-      <dl className="stats">
-        <div>
-          <dt>Live</dt>
-          <dd className={`change-${toneOf(fund.change)}`}>{pct(fund.change)}</dd>
+      <ValueChart points={s.curve} start={s.capital} height={180} />
+      {held && (
+        <div className="held">
+          <span className="row-sub">You copy with</span>
+          <b className="num">{usd(held.value)}</b>
+          <span className={`change change-${toneOf(held.value - held.cost)}`}>{signedUsd(Math.abs(held.value - held.cost) < 0.005 ? 0 : held.value - held.cost)}</span>
         </div>
-        <div>
-          <dt>Worst drop</dt>
-          <dd>{pct(-fund.worst_drop)}</dd>
-        </div>
-        <div>
-          <dt>Trades</dt>
-          <dd>{fund.fills}</dd>
-        </div>
-      </dl>
+      )}
       <div className="head">
-        <h2>Right now</h2>
-        <span className="row-sub">{stateOf(fund)}</span>
+        <h2>Now</h2>
       </div>
-      <p className="about">{fund.note || 'Waiting for its first decision.'}</p>
-      {fund.holdings.length > 0 && (
+      <p className="about">{s.note || 'Waiting for its first trade.'}</p>
+      {s.holdings.length > 0 && (
         <ul className="list">
-          {fund.holdings.map((h) => (
+          {s.holdings.map((h) => (
             <li key={h.market} className="row">
               <span className="row-main">
                 <span className="row-title">{h.market}</span>
@@ -108,71 +114,22 @@ function Record({ fund }: { fund: Fund }) {
         </ul>
       )}
       <div className="head">
-        <h2>How it trades</h2>
+        <h2>Rules</h2>
       </div>
-      <p className="about">{fund.rules}</p>
+      <p className="about">{s.rules}</p>
       <p className="footnote">
-        {fund.verified ? `Every decision and trade is on a tamper-proof record, ${fund.entries} entries so far.` : 'Its record does not check out.'}
-        {fund.test ? ` Tested on past prices from ${day(fund.test.start)} to ${day(fund.test.end)}: ${pct(fund.test.annual_return)} a year. Past tests are not live results.` : ''}
+        {s.verified ? `${s.entries} entries on a tamper-proof record.` : 'Its record does not check out.'}
+        {s.test ? ` Tested ${day(s.test.start)} to ${day(s.test.end)}: ${pct(s.test.annual_return)} a year. Tests are not live results.` : ''}
       </p>
-    </>
-  );
-}
-
-export function ManagerPage({ id }: { id: string }) {
-  const [data] = useMarkets();
-  const [me, setMe] = useMe();
-  const [sheet, setSheet] = useState(false);
-  const fund = data?.funds.find((f) => f.id === id);
-  if (!fund) return <TopBar backTo="/managers" />;
-  const held = me?.backed.find((b) => b.fund === id);
-  return (
-    <>
-      <TopBar
-        backTo="/managers"
-        title={
-          <>
-            <b>{fund.name}</b>
-            <span>{kind(fund)}</span>
-          </>
-        }
-      />
-      {held ? (
-        <>
-          <span className="portfolio-label">Your money in {fund.name}</span>
-          <span className="hero-value num">{usd(held.value)}</span>
-          <span className={`hero-sub change-${toneOf(held.cost ? held.value / held.cost - 1 : 0)}`}>
-            {signedUsd(Math.abs(held.value - held.cost) < 0.005 ? 0 : held.value - held.cost)} on {usd(held.cost)}
-          </span>
-          <ul className="list settings">
-            <li>
-              <button className="row" onClick={() => setSheet(true)}>
-                <span className="row-main">
-                  <span className="row-title">Change amount</span>
-                </span>
-                <span className="chev">›</span>
-              </button>
-            </li>
-          </ul>
-        </>
-      ) : (
-        <div className="quote">
-          <span className="quote-price">{pct(fund.change)}</span>
-          <span className="row-sub">since it started trading live on paper</span>
-        </div>
-      )}
-      <Record fund={fund} />
-      {!held && (
-        <div className="dock">
-          <button className="cta cta-up" disabled={!me} onClick={() => setSheet(true)}>
-            Hire
-          </button>
-        </div>
-      )}
+      <div className="dock">
+        <button className="cta cta-up" disabled={me === null || PAUSED.has(id)} onClick={() => (me === false ? signIn() : setSheet(true))}>
+          {PAUSED.has(id) ? 'Paused' : held ? 'Change amount' : 'Copy'}
+        </button>
+      </div>
       {sheet && me && (
-        <BackSheet
+        <CopySheet
           fund={id}
-          name={fund.name}
+          name={s.name}
           available={me.balance}
           held={held?.value ?? 0}
           onClose={() => setSheet(false)}
