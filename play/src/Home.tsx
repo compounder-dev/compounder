@@ -32,7 +32,7 @@ export function Positions({ me, market, onChange }: { me: Me; market?: string; o
       {open.length === 0 ? (
         <p className="empty">{market ? 'No calls on this market yet.' : 'No calls yet. Pick a market to make one.'}</p>
       ) : (
-        <ul className="list">
+        <ul className="list group">
           {open.map(({ trade, symbol }) => {
             const pnl = pnlAt(trade, mids.get(trade.market) ?? trade.entry);
             return (
@@ -83,7 +83,7 @@ function MarketRow({ market, mid }: { market: Market; mid: number | undefined })
           <span className="row-sub">{market.name}</span>
         </span>
         <span className="row-end">
-          <span className="row-price">{price(now)}</span>
+          <span className="row-price">${price(now)}</span>
           <Change value={now && prev ? now / prev - 1 : market.change_day} />
         </span>
       </Link>
@@ -121,7 +121,7 @@ export function Markets() {
         ))}
       </nav>
       {!data && <div className="loading" aria-busy="true" />}
-      <ul className="list">
+      <ul className="list group">
         {markets.map((m) => (
           <MarketRow key={m.id} market={m} mid={mids.get(m.id)} />
         ))}

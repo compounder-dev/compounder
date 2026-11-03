@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 /** A number that flashes green or red for a moment when it moves. */
-export function Ticker({ value, text, className }: { value: number; text: string; className?: string }) {
+export function Ticker({ value, text, className }: { value: number; text: ReactNode; className?: string }) {
   const last = useRef(value);
   const [flash, setFlash] = useState<'up' | 'down' | null>(null);
   useEffect(() => {

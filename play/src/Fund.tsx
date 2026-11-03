@@ -3,7 +3,7 @@ import { addMoney, useMarkets, useMe, type Fund as Manager, type Me } from './ap
 import { useMids } from './feed.ts';
 import { signedUsd, usd } from './format.ts';
 import { liveEquity, Positions } from './Home.tsx';
-import { Change, Link, Logo, managerColour, toneOf } from './parts.tsx';
+import { Change, Link, Logo, managerColour, Money, toneOf } from './parts.tsx';
 import { fundPath } from './route.ts';
 import { Sheet } from './sheets.tsx';
 import { Ticker } from './Ticker.tsx';
@@ -63,22 +63,32 @@ export function FundHome({ me, setMe }: { me: Me; setMe: (me: Me) => void }) {
   const fees = (data?.funds ?? []).length ? me.history.reduce((s, h) => s + h.trade.fee, 0) + me.open.reduce((s, o) => s + o.trade.fee, 0) : 0;
   return (
     <>
-      <header className="topbar">
-        <span className="fund-name">
-          {me.fund}
-          <span className="pill">Practice</span>
+      <section className="panel">
+        <header className="topbar">
+          <span className="fund-name">
+            {me.fund}
+            <span className="pill">Practice</span>
+          </span>
+        </header>
+        <div className="panel-row">
+          <span className="portfolio-label">Your fund</span>
+          <span className="portfolio-label">Cash for calls</span>
+        </div>
+        <div className="panel-row panel-values">
+          <Ticker className="hero-value num" value={equity} text={<Money value={equity} />} />
+          <Money className="panel-cash num" value={Math.max(0, me.balance)} />
+        </div>
+        <span className="hero-sub">
+          <span className={`change-${toneOf(then ? today / then : 0)}`}>{signedUsd(Math.abs(today) < 0.005 ? 0 : today)} today</span>
+          <span className="muted">
+            {' '}
+            · <Change value={me.start ? equity / me.start - 1 : 0} /> since start
+          </span>
         </span>
-      </header>
-      <Ticker className="hero-value num" value={equity} text={usd(equity)} />
-      <span className="hero-sub">
-        <span className={`change-${toneOf(then ? today / then : 0)}`}>
-          {signedUsd(Math.abs(today) < 0.005 ? 0 : today)} today
-        </span>
-        <span className="muted">
-          {' '}
-          · <Change value={me.start ? equity / me.start - 1 : 0} /> since start
-        </span>
-      </span>
+        <button className="pill-button" onClick={() => setAdding(true)}>
+          Add money <span aria-hidden="true">»</span>
+        </button>
+      </section>
       <ValueChart points={me.curve} start={me.start} />
 
       <div className="alloc">
@@ -112,7 +122,7 @@ export function FundHome({ me, setMe }: { me: Me; setMe: (me: Me) => void }) {
         <h2>Managers</h2>
         <Link to="/managers">Hire</Link>
       </div>
-      <ul className="list">
+      <ul className="list group">
         {me.backed.map((b) => {
           const m = managers.get(b.fund);
           return (
@@ -148,11 +158,6 @@ export function FundHome({ me, setMe }: { me: Me; setMe: (me: Me) => void }) {
 
       <p className="proof">Live prices from Hyperliquid · every manager trade on a verified record · fees {usd(fees)}</p>
 
-      <div className="dock dock-tabs">
-        <button className="cta cta-up" onClick={() => setAdding(true)}>
-          Add money
-        </button>
-      </div>
       {adding && (
         <AddSheet
           onClose={() => setAdding(false)}

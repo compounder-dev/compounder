@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { startFund, type Me } from './api.ts';
+import { startFund, useMarkets, type Fund, type Me } from './api.ts';
 import { managerColour } from './parts.tsx';
 
 const TEMPERAMENTS = [
@@ -18,6 +18,43 @@ export function MixBar({ mix }: { mix: readonly (readonly [string, number])[] })
         <i key={name} style={{ width: `${share}%`, background: colourOf(name) }} />
       ))}
     </span>
+  );
+}
+
+/** The venue takes no order worth less than this many dollars. */
+const MIN_ORDER = 10;
+
+/** What an amount buys right now under a mix: the orders big enough to place, and the rest. */
+function plan(amount: number, mix: readonly (readonly [string, number])[], funds: Fund[]) {
+  const byName = new Map(funds.map((f) => [f.name, f]));
+  const want = new Map<string, number>();
+  const waiting: string[] = [];
+  for (const [name, share] of mix) {
+    const fund = byName.get(name);
+    if (!fund) continue;
+    if (fund.holdings.length === 0) waiting.push(name);
+    for (const h of fund.holdings) want.set(h.market, (want.get(h.market) ?? 0) + (amount * share * h.weight) / 100);
+  }
+  const rows = [...want].sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
+  return { placed: rows.filter(([, v]) => Math.abs(v) >= MIN_ORDER), small: rows.filter(([, v]) => Math.abs(v) < MIN_ORDER), waiting };
+}
+
+function Plan({ amount, mix }: { amount: number; mix: readonly (readonly [string, number])[] }) {
+  const [data] = useMarkets();
+  if (!data) return null;
+  const { placed, small, waiting } = plan(amount, mix, data.funds);
+  const money = (v: number) => `$${Math.abs(v).toFixed(v >= 100 ? 0 : 2)}`;
+  return (
+    <div className="plan">
+      <span className="plan-title">What ${amount.toLocaleString()} buys right now</span>
+      {placed.length > 0 && <span>{placed.map(([m, v]) => `${m} ${money(v)}`).join(' · ')}</span>}
+      {small.length > 0 && (
+        <span className="muted">
+          Under the $10 minimum with real money: {small.map(([m, v]) => `${m} ${money(v)}`).join(', ')}
+        </span>
+      )}
+      {waiting.length > 0 && <span className="muted">Waiting for its signal: {waiting.join(', ')}</span>}
+    </div>
   );
 }
 
@@ -59,6 +96,7 @@ export function Start({ onStarted }: { onStarted: (me: Me) => void }) {
             <MixBar mix={t.mix} />
             <span className="temperament-line">{t.line}</span>
             <span className="temperament-mix">{t.mix.map(([n, s]) => `${n} ${s}%`).join(' · ')}</span>
+            {t.key === temperament && <Plan amount={amount} mix={t.mix} />}
           </button>
         ))}
       </div>

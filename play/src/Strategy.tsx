@@ -9,7 +9,7 @@ import { ValueChart } from './ValueChart.tsx';
 
 const kind = (f: { model?: string; speed: string }) => (f.model ? 'AI model' : f.speed === 'velocity' ? 'Fast' : 'Long-term');
 const daysLive = (f: { curve: [number, number][] }) => Math.max(1, Math.ceil((Date.now() - (f.curve[0]?.[0] ?? Date.now())) / 86_400_000));
-const day = (t: number) => new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+const day = (t: number) => new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 
 /** Managers that do not take money yet: paused, or no edge after costs in their tests. */
 const BENCH = new Set(['agent-deepseek', 'daily-reversal', 'chip-rotation']);

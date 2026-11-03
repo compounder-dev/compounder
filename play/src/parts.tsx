@@ -29,10 +29,54 @@ export function ManagerMark({ id, name }: { id: string; name: string }) {
   );
 }
 
+const LOGOS = new Set(['AAPL', 'AMD', 'AMZN', 'BTC', 'COIN', 'ETH', 'GOOGL', 'HOOD', 'HYPE', 'META', 'MSFT', 'MSTR', 'MU', 'NVDA', 'PLTR', 'SOL', 'TSLA']);
+
+/** Marks drawn here for what has no company logo: metals, oil and the indices. */
+const MARKS: Record<string, { label?: string; colour: string; path?: string }> = {
+  GOLD: { colour: '#ffb01f', path: 'M5 16h14l-2.5-7h-9z' },
+  SILVER: { colour: '#c8ccd2', path: 'M5 16h14l-2.5-7h-9z' },
+  CL: { colour: '#ff8f5a', path: 'M12 4c3 4 5 7 5 9.5a5 5 0 0 1-10 0C7 11 9 8 12 4z' },
+  BRENTOIL: { colour: '#ff8f5a', path: 'M12 4c3 4 5 7 5 9.5a5 5 0 0 1-10 0C7 11 9 8 12 4z' },
+  SP500: { colour: '#8cc8ff', label: '500' },
+  XYZ100: { colour: '#8cc8ff', label: '100' },
+};
+
 export function Logo({ symbol, kind }: { symbol: string; kind?: string }) {
+  if (LOGOS.has(symbol)) {
+    return (
+      <span className="logo logo-img" aria-hidden="true">
+        <img src={`/logos/${symbol}.webp`} alt="" width="26" height="26" loading="lazy" decoding="async" />
+      </span>
+    );
+  }
+  const mark = MARKS[symbol];
+  if (mark) {
+    return (
+      <span className="logo logo-img" style={{ color: mark.colour }} aria-hidden="true">
+        {mark.path ? (
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+            <path d={mark.path} />
+          </svg>
+        ) : (
+          <b className="logo-label">{mark.label}</b>
+        )}
+      </span>
+    );
+  }
   return (
     <span className={`logo logo-${kind ?? 'fund'}`} aria-hidden="true">
       {symbol.replace(/[^A-Z0-9]/gi, '').slice(0, 2).toUpperCase()}
+    </span>
+  );
+}
+
+/** Dollars with the cents dimmer than the whole, as a balance reads at a glance. */
+export function Money({ value, className }: { value: number; className?: string }) {
+  const [whole, cents] = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(value)).split('.');
+  return (
+    <span className={className}>
+      {value < 0 ? '−' : ''}${whole}
+      <span className="cents">.{cents}</span>
     </span>
   );
 }

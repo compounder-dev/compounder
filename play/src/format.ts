@@ -12,7 +12,7 @@ export function price(n: number | null | undefined): string {
 export function pct(fraction: number | null | undefined, sign = true): string {
   if (fraction == null || !Number.isFinite(fraction)) return '–';
   const text = `${Math.abs(fraction * 100).toFixed(2)}%`;
-  if (!sign) return text;
+  if (!sign || text === '0.00%') return text;
   return fraction > 0 ? `+${text}` : fraction < 0 ? `−${text}` : text;
 }
 
