@@ -5,6 +5,9 @@
 export const BNB_CHAIN = 56;
 /** The cash a swap spends. USDT is what the stock tokens are quoted against on BNB Chain. */
 export const CASH = { symbol: 'USDT', address: '0x55d398326f99059ff775485246999027b3197955', decimals: 18 } as const;
+/** The same cash on Base, where a South African exchange can send it cheaply. Bridged in one signature. */
+export const BASE_USDC = { symbol: 'USDC', address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', decimals: 6 } as const;
+export const BASE = 8453;
 
 export type Wallet = { address: string; chainId: number };
 
@@ -20,26 +23,46 @@ export async function connect(): Promise<Wallet> {
   const wallet = provider();
   if (!wallet) throw new NoWallet('No wallet in this browser. Install MetaMask, Rabby or Trust.');
   const [address] = (await wallet.request({ method: 'eth_requestAccounts' })) as string[];
-  await onBnb(wallet);
+  await onChain(BNB_CHAIN);
   const chainId = Number(await wallet.request({ method: 'eth_chainId' }));
   return { address, chainId };
 }
 
-/** Wallets rarely start on BNB Chain, and some have not heard of it at all. */
-async function onBnb(wallet: Provider): Promise<void> {
-  if (Number(await wallet.request({ method: 'eth_chainId' })) === BNB_CHAIN) return;
+const CHAINS: Record<number, { hex: string; name: string; symbol: string; rpc: string[]; explorer: string }> = {
+  [BNB_CHAIN]: {
+    hex: '0x38',
+    name: 'BNB Smart Chain',
+    symbol: 'BNB',
+    rpc: ['https://bsc-dataseed.binance.org'],
+    explorer: 'https://bscscan.com',
+  },
+  [BASE]: {
+    hex: '0x2105',
+    name: 'Base',
+    symbol: 'ETH',
+    rpc: ['https://mainnet.base.org'],
+    explorer: 'https://basescan.org',
+  },
+};
+
+/** Put the wallet on a chain, and teach it that chain if it has never heard of it. */
+export async function onChain(chain: number): Promise<void> {
+  const wallet = provider();
+  if (!wallet) throw new NoWallet('No wallet in this browser.');
+  if (Number(await wallet.request({ method: 'eth_chainId' })) === chain) return;
+  const known = CHAINS[chain];
   try {
-    await wallet.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x38' }] });
+    await wallet.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: known.hex }] });
   } catch {
     await wallet.request({
       method: 'wallet_addEthereumChain',
       params: [
         {
-          chainId: '0x38',
-          chainName: 'BNB Smart Chain',
-          nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
-          rpcUrls: ['https://bsc-dataseed.binance.org'],
-          blockExplorerUrls: ['https://bscscan.com'],
+          chainId: known.hex,
+          chainName: known.name,
+          nativeCurrency: { name: known.symbol, symbol: known.symbol, decimals: 18 },
+          rpcUrls: known.rpc,
+          blockExplorerUrls: [known.explorer],
         },
       ],
     });

@@ -14,7 +14,7 @@ Funds as rules. A strategy is a document of rule trees; the engine evaluates it,
 
 ## Real shares
 
-The markets screen buys and sells the actual Ondo token — `NVDAon`, `SPCXon` and the rest — on BNB Chain. The user's own wallet pays USDT and receives the token: the server only names the tokens, with the address and decimals from `server/data/assets.json`, and the browser gets the route from KyberSwap's aggregator and asks the wallet to sign. Compounder never holds the money or the token, and no key is entered anywhere. The same sheet sells back to cash. The practice fund beside it is unchanged and labelled practice.
+The markets screen buys and sells the actual Ondo token — `NVDAon`, `SPCXon` and the rest — on BNB Chain. The user's own wallet pays USDT and receives the token: the server only names the tokens, with the address and decimals from `server/data/assets.json`, and the browser gets the route from KyberSwap's aggregator and asks the wallet to sign. Compounder never holds the money or the token, and no key is entered anywhere. The same sheet sells back to cash. Cash can also come from Base: `Buy with USDC on Base` bridges and swaps in one signature through LI.FI, which is the cheap route from a South African exchange, since VALR sends USDC on Base and not on BNB Chain. The practice fund beside it is unchanged and labelled practice.
 
 ## Run
 

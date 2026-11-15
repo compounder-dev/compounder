@@ -50,3 +50,56 @@ export async function quote(tokenIn: string, tokenOut: string, amountIn: bigint,
     value: BigInt(built.data.transactionValue || '0'),
   };
 }
+
+/** A bridge-and-swap route: cash on one chain leaves as the token on another. */
+export type CrossQuote = {
+  /** The call the wallet signs, on the source chain. */
+  to: string;
+  data: string;
+  value: bigint;
+  /** Who must be allowed to take the cash. */
+  approval: string;
+  /** What lands on the far side, in the token's own units. */
+  out: bigint;
+  outUsd: number;
+  gasUsd: number;
+  /** Seconds the bridge usually takes. */
+  seconds: number;
+};
+
+const LIFI = 'https://li.quest/v1';
+
+type LifiQuote = {
+  transactionRequest?: { to?: string; data?: string; value?: string };
+  estimate?: { approvalAddress?: string; toAmount?: string; toAmountUSD?: string; executionDuration?: number; gasCosts?: { amountUSD?: string }[] };
+};
+
+/** One route from cash on `fromChain` to a token on `toChain`, built for this wallet. */
+export async function crossQuote(cash: { address: string; decimals: number; symbol: string }, chain: number, token: string, amount: bigint, taker: string): Promise<CrossQuote> {
+  const query = new URLSearchParams({
+    fromChain: String(chain),
+    toChain: String(56),
+    fromToken: cash.address,
+    toToken: token,
+    fromAmount: amount.toString(),
+    fromAddress: taker,
+    toAddress: taker,
+    integrator: 'compounder',
+  });
+  const response = await fetch(`${LIFI}/quote?${query}`, { headers: { accept: 'application/json' } });
+  const body = (await response.json().catch(() => null)) as (LifiQuote & { message?: string }) | null;
+  if (!response.ok || !body?.transactionRequest?.to || !body.transactionRequest.data || !body.estimate) {
+    throw new Error(body?.message || `No route from ${cash.symbol} to this token right now.`);
+  }
+  const gas = (body.estimate.gasCosts ?? []).reduce((sum, each) => sum + Number(each.amountUSD ?? 0), 0);
+  return {
+    to: body.transactionRequest.to,
+    data: body.transactionRequest.data,
+    value: BigInt(body.transactionRequest.value ?? '0'),
+    approval: body.estimate.approvalAddress ?? body.transactionRequest.to,
+    out: BigInt(body.estimate.toAmount ?? '0'),
+    outUsd: Number(body.estimate.toAmountUSD ?? 0),
+    gasUsd: gas,
+    seconds: Number(body.estimate.executionDuration ?? 60),
+  };
+}
