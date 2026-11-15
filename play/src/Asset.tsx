@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { signIn, useMarkets, useMe, type Trade } from './api.ts';
+import { signIn, useMarkets, useMe, useTokens, type Trade } from './api.ts';
 import { Chart, RANGES, type Range } from './Chart.tsx';
 import { useMid } from './feed.ts';
 import { price } from './format.ts';
 import { Positions } from './Markets.tsx';
 import { Change, Link, TopBar } from './parts.tsx';
 import { fundPath } from './route.ts';
+import { BuySheet } from './Buy.tsx';
 import { Receipt, TradeSheet } from './sheets.tsx';
 
 const ABOUT: Record<string, string> = {
@@ -25,6 +26,9 @@ export function Asset({ id }: { id: string }) {
   const [start, setStart] = useState<number | null>(null);
   const [trading, setTrading] = useState(false);
   const [placed, setPlaced] = useState<Trade | null>(null);
+  const [buying, setBuying] = useState(false);
+  // The same company as a tokenised share, when this market has one behind it.
+  const token = useTokens().find((each) => each.ticker === market?.symbol && each.chain_id === 56);
   const symbol = market?.symbol ?? id.split(':').pop() ?? id;
   const latest = me ? me.open.find((o) => o.trade.market === id)?.trade : undefined;
   const change = now && start ? now / start - 1 : null;
@@ -84,10 +88,18 @@ export function Asset({ id }: { id: string }) {
         </>
       )}
       <div className="dock">
-        <button className="cta cta-up" disabled={me === null || !now} onClick={() => (me === false ? signIn() : setTrading(true))}>
-          Trade {symbol}
-        </button>
+        <div className="dock-stack">
+          {token && (
+            <button className="cta cta-up" onClick={() => setBuying(true)}>
+              Buy {token.symbol} — real
+            </button>
+          )}
+          <button className={`cta${token ? '' : ' cta-up'}`} disabled={me === null || !now} onClick={() => (me === false ? signIn() : setTrading(true))}>
+            {token ? `Trade ${symbol} · practice` : `Trade ${symbol}`}
+          </button>
+        </div>
       </div>
+      {buying && token && <BuySheet token={token} onClose={() => setBuying(false)} />}
       {trading && me && (
         <TradeSheet
           market={id}

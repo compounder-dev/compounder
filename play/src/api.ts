@@ -115,3 +115,24 @@ export const closeTrade = (id: string) => call<Me>(`/v1/trades/${id}/close`, {})
 export const startFund = (amount: number) => call<Me>('/v1/fund/start', { amount });
 export const copyStrategy = (fund: string, amount: number) => call<Me>('/v1/back', { fund, amount });
 export const addMoney = (amount: number) => call<Me>('/v1/fund/add', { amount });
+
+/** A tokenised share the app can buy for real: an Ondo token on a public chain. */
+export type Token = { symbol: string; ticker: string; name: string; address: string; decimals: number; chain_id: number };
+
+let askedForTokens: Promise<Token[]> | null = null;
+let knownTokens: Token[] = [];
+
+/** Every tokenised share the server knows, asked for once and kept. */
+export function useTokens(): Token[] {
+  const [list, setList] = useState(knownTokens);
+  useEffect(() => {
+    askedForTokens ??= call<{ tokens: Token[] }>('/v1/tokens')
+      .then((body) => (knownTokens = body.tokens ?? []))
+      .catch(() => {
+        askedForTokens = null;
+        return [];
+      });
+    void askedForTokens.then(setList);
+  }, []);
+  return list;
+}

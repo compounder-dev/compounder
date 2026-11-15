@@ -127,7 +127,8 @@ pub async fn gate(State(auth): State<Auth>, mut request: Request, next: Next) ->
     }
     let path = request.uri().path();
     // Anyone can look: every page, the markets and the onchain fund. Acting needs an account.
-    let looking = request.method() == axum::http::Method::GET && (!path.starts_with("/v1/") || matches!(path, "/v1/markets" | "/v1/onchain"));
+    // The token list is part of looking: a wallet can buy without an account here.
+    let looking = request.method() == axum::http::Method::GET && (!path.starts_with("/v1/") || matches!(path, "/v1/markets" | "/v1/onchain" | "/v1/tokens"));
     let open = looking
         || matches!(path, "/login" | "/signup" | "/logout" | "/health")
         || path.starts_with("/assets/")

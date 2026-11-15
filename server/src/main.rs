@@ -267,6 +267,27 @@ async fn list_assets() -> Json<Value> {
     Json(json!({ "assets": assets().values().collect::<Vec<_>>() }))
 }
 
+/// The tokenised shares a real buy can land in: each listed share the registry
+/// holds as an Ondo token, with the ticker its price history tracks. The
+/// browser needs the address and decimals to build a swap the wallet signs.
+async fn list_tokens() -> Json<Value> {
+    let tokens: Vec<Value> = assets()
+        .values()
+        .filter(|asset| asset.symbol.ends_with("on") && asset.tracks.is_some())
+        .map(|asset| {
+            json!({
+                "symbol": asset.symbol,
+                "ticker": asset.tracks,
+                "name": asset.name,
+                "address": asset.address,
+                "decimals": asset.decimals,
+                "chain_id": asset.chain_id,
+            })
+        })
+        .collect();
+    Json(json!({ "tokens": tokens }))
+}
+
 async fn list_strategies(State(shared): State<Shared>) -> ApiResult {
     let views = aside(move || strategy_views(shared.tested.as_deref())).await??;
     Ok(Json(json!({ "strategies": views })))
@@ -473,6 +494,7 @@ fn router(dist: PathBuf, prices: Option<Arc<Prices>>, play: play::Play) -> Route
     let assets = ServeDir::new(dist.join("assets")).precompressed_br().precompressed_gzip();
     let api = Router::new()
         .route("/assets", get(list_assets))
+        .route("/tokens", get(list_tokens))
         .route("/strategies", get(list_strategies))
         .route("/strategies/{id}", get(one_strategy))
         .route("/strategies/{id}/test", get(strategy_test))
@@ -640,6 +662,25 @@ mod tests {
             assert_eq!(id, format!("{}:{}", asset["address"].as_str().unwrap(), asset["chain_id"]));
             assert!(!asset["symbol"].as_str().unwrap().is_empty());
         }
+    }
+
+    #[tokio::test]
+    async fn the_token_list_is_the_shares_a_real_buy_can_leave_in_a_wallet() {
+        let (status, body) = call("GET", "/v1/tokens", None).await;
+        assert_eq!(status, StatusCode::OK);
+        let tokens = body["tokens"].as_array().unwrap();
+        assert!(tokens.len() > 50, "{} tokens", tokens.len());
+        for token in tokens {
+            let symbol = token["symbol"].as_str().unwrap();
+            assert!(symbol.ends_with("on"), "{symbol}");
+            assert_eq!(token["chain_id"], 56);
+            assert!(token["address"].as_str().unwrap().starts_with("0x"));
+            assert_eq!(token["decimals"], 18);
+            assert!(!token["ticker"].as_str().unwrap().is_empty());
+        }
+        let nvidia = tokens.iter().find(|token| token["symbol"] == "NVDAon").expect("NVDAon is listed");
+        assert_eq!(nvidia["ticker"], "NVDA");
+        assert_eq!(nvidia["address"], "0xa9ee28c80f960b889dfbd1902055218cba016f75");
     }
 
     #[tokio::test]
